@@ -1,0 +1,12 @@
+{
+  "ID": "8F1B6A2C4D7E4F0A9B3C5D6E7F801234",
+  "ActionKeyword": "cp",
+  "Name": "ChillPill",
+  "Description": "Control the ChillPill shell: volume, brightness, timers, wallpapers and clipboard history",
+  "Author": "ChillPill-Win contributors",
+  "Version": "0.1.0",
+  "Language": "python",
+  "Website": "https://github.com/jadewisemann/pill-status-bar",
+  "ExecuteFileName": "main.py",
+  "IcoPath": "Images/chillpill.png"
+}

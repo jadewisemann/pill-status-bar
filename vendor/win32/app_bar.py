@@ -1,0 +1,169 @@
+# ---------------------------------------------------------------------------
+# Vendored from yasb -- https://github.com/amnweb/yasb
+# MIT License, Copyright (c) 2024 amnweb.  Full text: vendor/LICENSE.yasb
+# Upstream path: src/core/utils/win32/app_bar.py
+# Upstream revision: 95089f3cfffe5688911dc1a0e09dd959d49a321e
+#
+# DO NOT EDIT.  The only change applied to this file is a mechanical rewrite of
+# import paths; see vendor/README.md.  Behaviour changes belong in
+# shell/platform/, never here.
+# ---------------------------------------------------------------------------
+import ctypes
+import logging
+from ctypes import POINTER, Structure, c_ulong, sizeof, windll, wintypes
+
+import win32con
+from PyQt6.QtGui import QScreen
+
+shell32 = windll.shell32
+user32 = windll.user32
+
+# Custom callback message for AppBar notifications (WM_USER + 100)
+APPBAR_CALLBACK_MESSAGE = 0x0400 + 100  # WM_USER = 0x0400
+
+"""
+Application Desktop Toolbar (with added support for PyQt6)
+
+https://docs.microsoft.com/en-us/windows/win32/shell/application-desktop-toolbars
+"""
+
+
+class AppBarEdge:
+    """
+    A value that specifies the edge of the screen.
+    Documentation: https://docs.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-appbardata#members
+    """
+
+    Left = 0
+    Top = 1
+    Right = 2
+    Bottom = 3
+
+
+class AppBarMessage:
+    """
+    SHAppBarMessage App Bar Messages
+    Documentation: https://docs.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shappbarmessage
+    """
+
+    New = 0
+    Remove = 1
+    QueryPos = 2
+    SetPos = 3
+    GetState = 4
+    GetTaskbarPos = 5
+    Activate = 6
+    GetAutoHideBar = 7
+    SetAutoHideBar = 8
+    WindowPosChanged = 9
+    SetState = 10
+    GetAutoHideBarEx = 11
+    SetAutoHideBarEx = 12
+
+
+class AppBarNotify:
+    """
+    AppBar notification codes sent via callback message
+    Documentation: https://docs.microsoft.com/en-us/windows/win32/shell/abn-fullscreenapp
+    """
+
+    StateChange = 0  # ABN_STATECHANGE
+    PosChanged = 1  # ABN_POSCHANGED
+    FullScreenApp = 2  # ABN_FULLSCREENAPP
+    WindowArrange = 3  # ABN_WINDOWARRANGE
+
+
+class AppBarData(Structure):
+    """
+    AppBarData struct
+    Documentation: https://docs.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-appbardata#syntax
+    """
+
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("hWnd", wintypes.HWND),
+        ("uCallbackMessage", ctypes.c_ulong),
+        ("uEdge", c_ulong),
+        ("rc", wintypes.RECT),
+        ("lParam", wintypes.LPARAM),
+    ]
+
+
+P_APPBAR_DATA = POINTER(AppBarData)
+
+
+class Win32AppBar:
+    def __init__(
+        self,
+    ):
+        self.app_bar_data = None
+        self.callback_message = APPBAR_CALLBACK_MESSAGE
+
+    def create_appbar(
+        self,
+        hwnd: int,
+        edge: AppBarEdge,
+        app_bar_height: int,
+        screen: QScreen,
+        scale_screen: bool = False,
+        bar_name: str = None,
+        reserve_space: bool = True,
+        always_on_top: bool = False,
+    ):
+        self.app_bar_data = AppBarData()
+        self.app_bar_data.cbSize = wintypes.DWORD(sizeof(self.app_bar_data))
+        self.app_bar_data.uEdge = edge
+        self.app_bar_data.hWnd = hwnd
+        self.register_new()
+
+        current_ex_style = windll.user32.GetWindowLongPtrW(hwnd, win32con.GWL_EXSTYLE)
+        updated_ex_style = current_ex_style | win32con.WS_EX_NOACTIVATE
+        if always_on_top:
+            updated_ex_style |= win32con.WS_EX_TOPMOST
+        windll.user32.SetWindowLongPtrW(hwnd, win32con.GWL_EXSTYLE, updated_ex_style)
+
+        self.position_bar(app_bar_height, screen, scale_screen, bar_name)
+        # Only reserve screen space if requested windows_app_bar: true
+        if reserve_space:
+            self.set_position()
+
+    def position_bar(
+        self, app_bar_height: int, screen: QScreen, scale_screen: bool = False, bar_name: str = None
+    ) -> None:
+        geometry = screen.geometry()
+        bar_height = int(app_bar_height * screen.devicePixelRatio())
+        screen_height = int(geometry.height() * screen.devicePixelRatio() if scale_screen else geometry.height())
+
+        self.app_bar_data.rc.left = geometry.x()
+        self.app_bar_data.rc.right = geometry.x() + geometry.width()
+
+        if self.app_bar_data.uEdge == AppBarEdge.Top:
+            self.app_bar_data.rc.top = screen.geometry().y()
+            self.app_bar_data.rc.bottom = screen.geometry().y() + bar_height
+        else:
+            self.app_bar_data.rc.top = screen.geometry().y() + screen_height - bar_height
+            self.app_bar_data.rc.bottom = screen.geometry().y() + screen_height
+        bar_info = f"Bar {bar_name}" if bar_name else "Bar"
+        logging.debug(
+            "%s Created on Screen: %s [Bar Height: %spx, DPI Scale: %s]",
+            bar_info,
+            screen.name(),
+            app_bar_height,
+            screen.devicePixelRatio(),
+        )
+
+    def register_new(self):
+        self.app_bar_data.uCallbackMessage = self.callback_message
+        shell32.SHAppBarMessage(AppBarMessage.New, P_APPBAR_DATA(self.app_bar_data))
+
+    def window_pos_changed(self):
+        shell32.SHAppBarMessage(AppBarMessage.WindowPosChanged, P_APPBAR_DATA(self.app_bar_data))
+
+    def query_appbar_position(self):
+        shell32.SHAppBarMessage(AppBarMessage.QueryPos, P_APPBAR_DATA(self.app_bar_data))
+
+    def set_position(self):
+        shell32.SHAppBarMessage(AppBarMessage.SetPos, P_APPBAR_DATA(self.app_bar_data))
+
+    def remove_appbar(self):
+        shell32.SHAppBarMessage(AppBarMessage.Remove, P_APPBAR_DATA(self.app_bar_data))

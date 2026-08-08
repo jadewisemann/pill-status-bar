@@ -1,0 +1,49 @@
+ChillPill-Win
+Copyright (c) 2026 ChillPill-Win contributors
+Licensed under the MIT License (see LICENSE).
+
+This product includes third-party software and third-party design work.
+
+--------------------------------------------------------------------------
+1. yasb -- vendored source code
+--------------------------------------------------------------------------
+
+Files under vendor/win32/ are copied from yasb:
+
+    https://github.com/amnweb/yasb
+    MIT License, Copyright (c) 2024 amnweb
+    Full licence text: vendor/LICENSE.yasb
+    Imported at revision 95089f3cfffe5688911dc1a0e09dd959d49a321e
+
+They are the Win32 plumbing layer -- ctypes bindings, structures, constants,
+DWM backdrop, AppBar registration, global hotkeys, focus handling and icon
+extraction.  The only modification applied is a mechanical rewrite of import
+paths (core.utils.win32.* -> vendor.win32.*, core.events.service ->
+vendor.compat.events).  vendor/win32/utils.py is a partial extract rather than
+a full copy; the header on that file says so.
+
+vendor/ is treated as read-only.  Behaviour changes belong in shell/platform/.
+
+yasb's widget layer, settings UI, validation schemas and services were NOT
+copied.  Where this project needed the same Windows API (media transport
+controls, notification listening, audio endpoints, DDC/CI brightness, WLAN),
+yasb's implementation was read as a reference and the code here was written
+independently.
+
+--------------------------------------------------------------------------
+2. ChillPill-Shell -- design only, no code
+--------------------------------------------------------------------------
+
+    https://github.com/LUCKYS1NGHH/ChillPill-Shell
+    GPLv3, v0.3.1
+
+No source code, images, sounds or other assets from ChillPill-Shell are
+included in or distributed with this project.  What was taken is factual
+design data: the morph size table, colour values, animation durations and
+configuration key names, all of which are reproduced in docs/SPEC.md and
+implemented independently in PyQt6.
+
+Design inspired by ChillPill-Shell by LUCKYS1NGHH.
+
+The name "ChillPill-Win" is used pending the original author's agreement; see
+docs/CREDITS.md for the alternatives held in reserve.

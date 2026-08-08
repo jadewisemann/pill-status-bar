@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chillpill-win"
+version = "0.1.0"
+description = "A morphing pill shell for Windows"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+keywords = ["windows", "shell", "status-bar", "desktop"]
+classifiers = [
+    "Environment :: Win32 (MS Windows)",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "PyQt6>=6.6",
+    "pydantic>=2.5",
+    "watchdog>=4.0",
+    # -- Windows only ------------------------------------------------------
+    "pywin32>=306; sys_platform == 'win32'",
+    "comtypes>=1.2; sys_platform == 'win32'",
+    "pycaw>=20240210; sys_platform == 'win32'",
+    "WMI>=1.5; sys_platform == 'win32'",
+    "pyvda>=0.4; sys_platform == 'win32'",
+    # Only the WinRT namespaces actually used: media transport controls,
+    # notification listening and the stream types the album art arrives in.
+    "winrt-Windows.Media.Control>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.UI.Notifications>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.UI.Notifications.Management>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=2.0; sys_platform == 'win32'",
+    # Icon extraction for the built-in launcher (skipped when Flow handles it).
+    "Pillow>=10.0; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+chillpill = "shell.app:run"
+chillpillc = "shell.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jadewisemann/pill-status-bar"
+
+[tool.setuptools]
+packages = ["shell", "shell.modules", "shell.surfaces", "shell.platform", "shell.ipc", "vendor", "vendor.win32", "vendor.win32.bindings", "vendor.compat"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+# vendor/ is upstream code kept byte-identical apart from import rewrites.
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+ignore = [
+    "N802",  # Qt overrides are camelCase by definition
+    "B008",  # Qt constructors in defaults are fine
+]

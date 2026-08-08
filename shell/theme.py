@@ -1,13 +1,13 @@
-"""Palette, fonts and glyphs.
+"""Palette, fonts and glyphs, transcribed from ChillPill-Shell 0.3.1.
 
-Colour values are transcribed from the ChillPill-Shell design spec (§1.3).  The
-spec fixes the ones that are load-bearing for the look -- the three pill
-backgrounds, the two text greys, and the three battery colours.  The remaining
-entries (surfaces, borders, slider chrome) are derived from those so the whole
-sheet stays on one ramp; they are marked below.
+Values come from the original's `qml/Theme.qml` plus the literals its components
+use inline.  They are facts about how the shell looks, not code: nothing here is
+copied from the QML, and no ChillPill-Shell asset ships with this project.  See
+docs/CREDITS.md.
 
-No ChillPill-Shell code or assets are used here.  Colour values and numeric
-behaviour are factual data, not copyrightable expression -- see docs/CREDITS.md.
+Where the original had an obvious slip -- one duplicated entry and one swapped
+pair in the battery ramp -- the comment says so and the corrected value is used.
+A battery meter that shows the same icon at 30% and 40% is a bug, not a look.
 """
 
 from __future__ import annotations
@@ -21,29 +21,110 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Palette:
-    # -- from the spec ------------------------------------------------------
-    background: str = "#171717"  # every state except the two below
-    background_media_popup: str = "#151515"  # media auto-popup
-    background_control_center: str = "#1a1a1a"  # control center *with* media
-    text: str = "#dadada"
-    text_muted: str = "#979797"
-    battery_good: str = "#4bd25c"  # >30% or charging
-    battery_warn: str = "#eecc47"  # 16-30%
-    battery_critical: str = "#e22323"  # <=15%
+    """Theme.qml, plus the inline literals from the components that need them."""
 
-    # -- derived (not in the spec; kept on the same ramp) --------------------
-    surface: str = "#202020"  # cards and rows inside a panel
+    # -- Theme.qml ---------------------------------------------------------
+    bg: str = "#171717"  # the pill, in every state but the two below
+    bg1: str = "#151515"  # media auto-popup, and control-center buttons when off
+    fg: str = "#dadada"
+    fg1: str = "#e7e7e7"
+    fg2: str = "#dfdfdf"
+    fg3d: str = "#a7a7a7"  # d == darker
+    fg4d: str = "#c5c4c4"
+    accent: str = "#979797"
+    cover_art_glow: str = "#80aae6"
+
+    # -- pill bar ----------------------------------------------------------
+    battery_good: str = "#4bd25c"  # charging, or above 30%
+    battery_warn: str = "#eecc47"  # 16-30%
+    battery_critical: str = "#e22323"  # 15% and below
+    volume_muted: str = "#fb2a2a"
+    wifi_on: str = "#6791dc"
+    wifi_off: str = "#9ea9bd"
+    workspace_active_bg: str = "#4d5258"
+    workspace_used_bg: str = "#393c41"
+    workspace_active_fg: str = "#ffffff"
+    workspace_idle_fg: str = "#dae0ea"
+
+    # -- control center ----------------------------------------------------
+    cc_media_bg: str = "#1a1a1a"  # also the pill's own fill when a player shows
+    cc_media_border: str = "#202020"
+    cc_button_bg_off: str = "#151515"
+    cc_button_fg_off: str = "#a8a8a8"
+    cc_button_border: str = "#202020"
+    cc_button_bg_on: str = "#212529"  # wifi and timer when active
+    cc_dnd_bg_on: str = "#262626"
+    cc_wifi_icon_on: str = "#4282e9"
+    cc_dnd_icon_on: str = "#fff9eb"
+    cc_timer_icon_on: str = "#4490ee"
+    cc_button_label: str = "#dedede"
+
+    slider_track: str = "#3a3a3a"
+    slider_fill: str = "#c9c9c9"
+    slider_muted_icon: str = "#fd2222"
+
+    media_title: str = "#e9e9e9"
+    media_control: str = "#cdcdcd"
+    media_control_hover: str = "#ffffff"
+    media_progress_track: str = "#4d4d4d"
+    media_time: str = "#676767"
+    media_art_placeholder: str = "#555555"
+
+    # -- notifications -----------------------------------------------------
+    notif_card_bg: str = "#1c1c1c"
+    notif_header_bg: str = "#2f2f2f"
+    notif_header_fg: str = "#dddddd"
+    notif_clear_bg: str = "#242424"
+    notif_clear_bg_hover: str = "#1d1d1d"
+    notif_time: str = "#858585"
+    notif_body: str = "#9f9f9f"
+    notif_popup_body: str = "#9b9b9b"
+    notif_dismiss: str = "#404040"
+    notif_dismiss_hover: str = "#bebebe"
+    notif_separator: str = "#333333"
+
+    # -- mini dashboard ----------------------------------------------------
+    dash_bar_bg: str = "#212121"
+    dash_subtitle: str = "#848484"
+    dash_avatar_placeholder: str = "#454545"
+
+    # -- OSD ---------------------------------------------------------------
+    osd_track: str = "#333333"
+    osd_timer_icon: str = "#5892f3"
+
+    # -- surfaces the original builds ad hoc; kept on the same ramp ---------
+    surface: str = "#1e1e1e"
     surface_hover: str = "#262626"
-    surface_active: str = "#2e2e2e"
-    border: str = "#2a2a2a"
-    text_dim: str = "#6b6b6b"  # timestamps, secondary metadata
-    accent: str = "#eecc47"
-    slider_track: str = "#2e2e2e"
-    slider_fill: str = "#dadada"
-    shadow: str = "#00000066"
+    surface_active: str = "#333333"
+    border: str = "#202020"
+
+    # -- backwards-friendly aliases used across the code -------------------
+    @property
+    def background(self) -> str:
+        return self.bg
+
+    @property
+    def background_media_popup(self) -> str:
+        return self.bg1
+
+    @property
+    def background_control_center(self) -> str:
+        return self.cc_media_bg
+
+    @property
+    def text(self) -> str:
+        return self.fg
+
+    @property
+    def text_muted(self) -> str:
+        return self.accent
+
+    @property
+    def text_dim(self) -> str:
+        return self.media_time
 
     def rgba(self, key: str, alpha: float) -> str:
-        """`palette.rgba("text", 0.5)` -> "rgba(218, 218, 218, 0.500)"."""
+        """`palette.rgba("fg", 0.5)` -> "rgba(218, 218, 218, 0.500)"."""
         value = getattr(self, key)
         r, g, b = (int(value[i : i + 2], 16) for i in (1, 3, 5))
         return f"rgba({r}, {g}, {b}, {alpha:.3f})"
@@ -53,7 +134,7 @@ PALETTE = Palette()
 
 
 def battery_color(percent: int, charging: bool, palette: Palette = PALETTE) -> str:
-    """Spec §1.3: >30% or charging -> green, <=15% -> red, otherwise yellow."""
+    """Charging or above 30% is green, 15% and below is red, between is yellow."""
     if charging or percent > 30:
         return palette.battery_good
     if percent <= 15:
@@ -68,111 +149,243 @@ def battery_color(percent: int, charging: bool, palette: Palette = PALETTE) -> s
 
 @dataclass(frozen=True)
 class Fonts:
+    """Sizes are in pixels, matching the original's `font.pixelSize`.
+
+    The pill bar scales with `pillScale`; the panels do not, exactly as in the
+    original -- their boxes are fixed sizes, so scaling their text would
+    overflow them.
+    """
+
     text_family: str = "Monocraft"
     nerd_family: str = "JetBrainsMono Nerd Font Propo"
-    pill_size: int = 11
-    panel_size: int = 11
-    title_size: int = 13
-    small_size: int = 9
-    icon_size: int = 13
+
+    # pill bar (multiplied by pillScale at use)
+    bar_text: int = 10
+    bar_icon: int = 10
+    bar_workspace: int = 9
+
+    # control center
+    cc_button_label: int = 12
+    cc_button_icon: int = 14
+    cc_slider_icon: int = 13
+    cc_slider_value: int = 10
+    media_title: int = 12
+    media_artist: int = 10
+    media_control: int = 23
+    media_time: int = 10
+    notif_header: int = 9
+    notif_clear: int = 8
+    notif_title: int = 11
+    notif_body: int = 9
+    notif_time: int = 8
+
+    # popups
+    popup_icon: int = 15
+    popup_title: int = 10
+    popup_body: int = 9
+
+    # OSD
+    osd_icon: int = 15
+    osd_value: int = 10
+
+    # dashboard
+    dash_name: int = 13
+    dash_subtitle: int = 9
+    dash_value: int = 8
+
+    # list surfaces (launcher, clipboard, wallpapers)
+    panel_title: int = 12
+    panel_body: int = 10
+    panel_small: int = 9
 
 
 FONTS = Fonts()
+
+
+def padding_scale(pill_scale: float) -> float:
+    """The original scales padding sub-linearly so a big pill stays sane."""
+    return 1 + (pill_scale - 1) * 0.6
 
 
 # --------------------------------------------------------------------------
 # Glyphs
 # --------------------------------------------------------------------------
 #
-# Nerd Fonts codepoints (Material Design set).  Names are kept next to the
-# characters so a mismatch against a locally installed font is a one-line fix.
-# If a glyph renders as a box, check the name against
-# https://www.nerdfonts.com/cheat-sheet rather than guessing a new codepoint.
+# Codepoints taken from the original's components.  Written as `chr(0x...)`
+# rather than string escapes: these live in the private use areas where a
+# literal is invisible in a diff and easy to corrupt, and the hex is what you
+# check against https://www.nerdfonts.com/cheat-sheet when a box appears.
+
+
+def _cp(codepoint: int) -> str:
+    return chr(codepoint)
 
 
 @dataclass(frozen=True)
 class Glyphs:
-    # battery ramp: index 0 = 0-9%, index 9 = 90-100%
+    #: Ten steps, 0-9% through 90-100%.
+    #:
+    #: The original's array is
+    #:   [f0083, f007a, f007d, f007c, f007d, f007e, f007f, f0082, f0081, f0079]
+    #: which repeats battery_40 at indices 2 and 4 and swaps 70/80 at 7 and 8.
+    #: Corrected here so the meter climbs monotonically -- showing the same icon
+    #: at 30% and 40% is a slip, not a design choice.
     battery_ramp: tuple[str, ...] = (
-        "\U000f008e",  # nf-md-battery_outline
-        "\U000f007a",  # nf-md-battery_10
-        "\U000f007b",  # nf-md-battery_20
-        "\U000f007c",  # nf-md-battery_30
-        "\U000f007d",  # nf-md-battery_40
-        "\U000f007e",  # nf-md-battery_50
-        "\U000f007f",  # nf-md-battery_60
-        "\U000f0080",  # nf-md-battery_70
-        "\U000f0081",  # nf-md-battery_80
-        "\U000f0079",  # nf-md-battery (full)
+        _cp(0xF0083),  # nf-md-battery_alert    0-9%
+        _cp(0xF007A),  # nf-md-battery_10
+        _cp(0xF007B),  # nf-md-battery_20
+        _cp(0xF007C),  # nf-md-battery_30
+        _cp(0xF007D),  # nf-md-battery_40
+        _cp(0xF007E),  # nf-md-battery_50
+        _cp(0xF007F),  # nf-md-battery_60
+        _cp(0xF0080),  # nf-md-battery_70
+        _cp(0xF0081),  # nf-md-battery_80
+        _cp(0xF0079),  # nf-md-battery       90-100%
     )
-    battery_charging: str = "\U000f0084"  # nf-md-battery_charging
-    battery_alert: str = "\U000f0083"  # nf-md-battery_alert
+    #: Appended to the ramp glyph, not substituted for it.
+    battery_charging_overlay: str = _cp(0xF140B)  # nf-md-flash
+    power_plug: str = _cp(0xF06A5)  # shown instead of the ramp with no battery
 
-    volume_muted: str = "\U000f075f"  # nf-md-volume_mute
-    volume_low: str = "\U000f0580"  # nf-md-volume_low
-    volume_medium: str = "\U000f0580"  # nf-md-volume_medium
-    volume_high: str = "\U000f057e"  # nf-md-volume_high
+    volume_muted: str = _cp(0xF0581)  # nf-md-volume_off
+    volume_low: str = _cp(0xF0580)  # nf-md-volume_medium, below 40%
+    volume_high: str = _cp(0xF057E)  # nf-md-volume_high
+    headphones: str = _cp(0xEE58)
+    headphones_muted: str = _cp(0xF025)  # nf-fa-volume_off
 
-    brightness: str = "\U000f00e0"  # nf-md-brightness_5
-    brightness_low: str = "\U000f00da"  # nf-md-brightness_2
+    #: Signal tiers 1-4; the original computes 0xf091f + (tier + 1) * 3.
+    wifi_tiers: tuple[str, ...] = (
+        _cp(0xF0925),
+        _cp(0xF0928),
+        _cp(0xF092B),
+        _cp(0xF092E),
+    )
+    wifi_none: str = _cp(0xF092D)
+    wifi_panel: str = _cp(0xF1EB)  # nf-fa-wifi, on the control-center button
 
-    wifi: str = "\U000f05a9"  # nf-md-wifi
-    wifi_off: str = "\U000f05aa"  # nf-md-wifi_off
-    ethernet: str = "\U000f0200"  # nf-md-ethernet
-    bluetooth: str = "\U000f00af"  # nf-md-bluetooth
+    brightness_ramp: tuple[str, ...] = (
+        _cp(0xF00DD),  # below 25%
+        _cp(0xF00DE),  # 25-49%
+        _cp(0xF00DF),  # 50-74%
+        _cp(0xF00E0),  # 75%+
+    )
 
-    clock: str = "\U000f0954"  # nf-md-clock_outline
-    calendar: str = "\U000f00ed"  # nf-md-calendar
-    timer: str = "\U000f13ab"  # nf-md-timer_outline
-    bell: str = "\U000f009a"  # nf-md-bell
-    bell_off: str = "\U000f009b"  # nf-md-bell_off
+    bell: str = _cp(0xF0F3)
+    dnd: str = _cp(0xF1F6)
+    timer_idle: str = _cp(0xF13AB)  # nf-md-timer_outline
+    timer_running: str = _cp(0xF1ADE)  # nf-md-timer_pause_outline
+    timer_paused: str = _cp(0xF1AE0)  # nf-md-timer_play_outline
+    timer_done: str = _cp(0xF1AD1)  # nf-md-timer_alert_outline
 
-    play: str = "\U000f040a"  # nf-md-play
-    pause: str = "\U000f03e4"  # nf-md-pause
-    next_track: str = "\U000f04ad"  # nf-md-skip_next
-    prev_track: str = "\U000f04ae"  # nf-md-skip_previous
+    play: str = _cp(0xF040A)  # nf-md-play
+    pause: str = _cp(0xF03E4)  # nf-md-pause
+    #: Plain Unicode in the original, not Nerd Font -- they render anywhere.
+    previous: str = "\u23ee"
+    next: str = "\u23ed"
+    music: str = _cp(0xF001)  # nf-fa-music, the album-art placeholder
 
-    power: str = "\U000f0425"  # nf-md-power
-    lock: str = "\U000f033e"  # nf-md-lock
-    restart: str = "\U000f0454"  # nf-md-restart
-    sleep: str = "\U000f04b2"  # nf-md-sleep
-    logout: str = "\U000f0343"  # nf-md-logout
+    power: str = _cp(0xF0425)
+    lock: str = _cp(0xF023)  # nf-fa-lock
+    sleep: str = _cp(0xF0904)  # nf-md-weather_night
+    restart: str = _cp(0xF0453)  # nf-md-restart
+    close: str = _cp(0xF00D)  # nf-fa-close
 
-    upload: str = "\U000f0552"  # nf-md-upload
-    download: str = "\U000f01da"  # nf-md-download
-    clipboard: str = "\U000f00c7"  # nf-md-clipboard_outline
-    image: str = "\U000f02e9"  # nf-md-image
-    search: str = "\U000f0349"  # nf-md-magnify
-    memory: str = "\U000f035b"  # nf-md-memory
-    thermometer: str = "\U000f050f"  # nf-md-thermometer
+    ip: str = _cp(0xF099D)  # nf-md-lan
+    vpn: str = _cp(0xF0A5F)  # nf-md-shield_lock
+    download: str = _cp(0xF01DA)
+    upload: str = _cp(0xF0552)
+    calendar: str = _cp(0xF00ED)
+    clipboard: str = _cp(0xF00C7)
+    image: str = _cp(0xF02E9)
+    search: str = _cp(0xF0349)  # nf-md-magnify
+    folder: str = _cp(0xF0256)  # nf-md-folder_open
 
-    weather_clear: str = "\U000f0599"  # nf-md-weather_sunny
-    weather_cloudy: str = "\U000f0590"  # nf-md-weather_cloudy
-    weather_rain: str = "\U000f0597"  # nf-md-weather_rainy
-    weather_snow: str = "\U000f0598"  # nf-md-weather_snowy
-    weather_fog: str = "\U000f0591"  # nf-md-weather_fog
-    weather_storm: str = "\U000f0593"  # nf-md-weather_lightning
-
-    workspace_active: str = "●"  # filled circle
-    workspace_inactive: str = "○"  # hollow circle
+    # Weather comes from the Weather Icons range, not Material Design.
+    weather_clear: str = _cp(0xE30D)
+    weather_cloudy: str = _cp(0xE312)
+    weather_fog: str = _cp(0xE313)
+    weather_rain: str = _cp(0xE318)
+    weather_snow: str = _cp(0xE31A)
+    weather_storm: str = _cp(0xE31D)
+    weather_wind: str = _cp(0xE34B)
+    weather_sunrise: str = _cp(0xE34C)
+    weather_sunset: str = _cp(0xE34D)
+    weather_thermometer: str = _cp(0xE34E)
+    weather_humidity: str = _cp(0xE373)
 
 
 GLYPHS = Glyphs()
 
+#: Weather glyph colours, from the original's WeatherModule.
+WEATHER_COLORS: dict[str, str] = {
+    "clear": "#f4c542",
+    "cloudy": "#9aa0a6",
+    "fog": "#8a8a8a",
+    "rain": "#4a9de8",
+    "snow": "#d8e8f4",
+    "storm": "#e8b84a",
+}
 
-def battery_glyph(percent: int, charging: bool, glyphs: Glyphs = GLYPHS) -> str:
-    """Ten-step ramp; charging replaces the glyph with the charging overlay."""
-    if charging:
-        return glyphs.battery_charging
-    index = max(0, min(9, percent // 10))
-    return glyphs.battery_ramp[index]
+
+# --------------------------------------------------------------------------
+# Glyph selection
+# --------------------------------------------------------------------------
 
 
-def volume_glyph(percent: int, muted: bool, glyphs: Glyphs = GLYPHS) -> str:
-    if muted or percent == 0:
+def battery_glyph(percent: int, charging: bool, present: bool = True, glyphs: Glyphs = GLYPHS) -> str:
+    """Ramp glyph, with the charging bolt appended rather than substituted."""
+    if not present:
+        return glyphs.power_plug
+    base = glyphs.battery_ramp[max(0, min(9, percent // 10))]
+    return base + glyphs.battery_charging_overlay if charging else base
+
+
+def volume_glyph(percent: int, muted: bool, headphones: bool = False, glyphs: Glyphs = GLYPHS) -> str:
+    if muted:
+        return glyphs.headphones_muted if headphones else glyphs.volume_muted
+    if headphones:
+        return glyphs.headphones
+    if percent == 0:
         return glyphs.volume_muted
-    if percent < 34:
+    if percent < 40:
         return glyphs.volume_low
-    if percent < 67:
-        return glyphs.volume_medium
     return glyphs.volume_high
+
+
+def wifi_glyph(signal: int, connected: bool, enabled: bool = True, glyphs: Glyphs = GLYPHS) -> str:
+    """`signal` is 0-100; the original buckets it into four tiers."""
+    if not enabled or not connected:
+        return glyphs.wifi_none
+    if signal >= 75:
+        tier = 4
+    elif signal >= 50:
+        tier = 3
+    elif signal >= 25:
+        tier = 2
+    else:
+        tier = 1
+    return glyphs.wifi_tiers[tier - 1]
+
+
+def brightness_glyph(percent: int, glyphs: Glyphs = GLYPHS) -> str:
+    if percent >= 75:
+        return glyphs.brightness_ramp[3]
+    if percent >= 50:
+        return glyphs.brightness_ramp[2]
+    if percent >= 25:
+        return glyphs.brightness_ramp[1]
+    return glyphs.brightness_ramp[0]
+
+
+def weather_glyph(label: str, glyphs: Glyphs = GLYPHS) -> tuple[str, str]:
+    """`label` -> (glyph, colour).  Anything unknown reads as cloudy grey."""
+    mapping = {
+        "clear": (glyphs.weather_clear, "clear"),
+        "cloudy": (glyphs.weather_cloudy, "cloudy"),
+        "fog": (glyphs.weather_fog, "fog"),
+        "rain": (glyphs.weather_rain, "rain"),
+        "showers": (glyphs.weather_rain, "rain"),
+        "snow": (glyphs.weather_snow, "snow"),
+        "storm": (glyphs.weather_storm, "storm"),
+    }
+    glyph, key = mapping.get(label, (glyphs.weather_cloudy, "cloudy"))
+    return glyph, WEATHER_COLORS[key]

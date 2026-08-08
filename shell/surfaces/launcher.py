@@ -60,7 +60,7 @@ class Launcher(Surface):
         search_row.addWidget(IconLabel(GLYPHS.search, size=14, parent=self))
         self.query = QLineEdit(self)
         self.query.setPlaceholderText("Search applications")
-        self.query.setFont(text_font(size=FONTS.panel_size))
+        self.query.setFont(text_font(size=FONTS.panel_body))
         self.query.setStyleSheet(
             f"QLineEdit {{ background: transparent; border: none; color: {PALETTE.text}; }}"
             f"QLineEdit::placeholder {{ color: {PALETTE.text_dim}; }}"
@@ -79,14 +79,14 @@ class Launcher(Surface):
             QListWidget::item:selected {{ background: {PALETTE.surface_hover}; }}
             """
         )
-        self.results.setFont(text_font(size=FONTS.panel_size))
+        self.results.setFont(text_font(size=FONTS.panel_body))
         self.results.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
         self.results.itemActivated.connect(lambda _item: self._launch_selected())
         self.results.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         outer.addWidget(self.results, 1)
 
         self.status = QLabel("", self)
-        self.status.setFont(text_font(size=FONTS.small_size))
+        self.status.setFont(text_font(size=FONTS.panel_small))
         self.status.setStyleSheet(f"color: {PALETTE.text_dim}; background: transparent;")
         outer.addWidget(self.status)
 

@@ -58,19 +58,35 @@ asserted in `tests/test_state.py`.)
 
 ### 1.2 Palette
 
-| Role | Value |
-| --- | --- |
-| background | `#171717` |
-| background (media popup) | `#151515` |
-| background (control center + media) | `#1a1a1a` |
-| text | `#dadada` |
-| muted text | `#979797` |
-| battery > 30% or charging | `#4bd25c` |
-| battery 16–30% | `#eecc47` |
-| battery ≤ 15% | `#e22323` |
+From the original's `qml/Theme.qml`:
 
-Surfaces, borders and slider chrome are derived from these in
-[`shell/theme.py`](../shell/theme.py) and marked as such.
+| Name | Value | Used for |
+| --- | --- | --- |
+| `bg` | `#171717` | the pill, in every state but the two below |
+| `bg1` | `#151515` | media auto-popup; control-center buttons when off |
+| `fg` | `#dadada` | body text |
+| `fg1` / `fg2` | `#e7e7e7` / `#dfdfdf` | brighter text |
+| `fg3d` / `fg4d` | `#a7a7a7` / `#c5c4c4` | dimmer text |
+| `accent` | `#979797` | secondary text — a grey, not a highlight |
+| `coverArtGlowShadow` | `#80aae6` | album art glow |
+
+Plus the literals its components use inline — battery thresholds
+(`#4bd25c` / `#eecc47` / `#e22323`), the WiFi blue `#6791dc`, workspace chips
+(`#4d5258` active, `#393c41` occupied), control-center buttons (`#151515` off,
+`#212529` on, `#a8a8a8` label), sliders (`#3a3a3a` track, `#c9c9c9` fill), and
+the media card at `#1a1a1a` with a 2px `#202020` border.
+
+All of it is in [`shell/theme.py`](../shell/theme.py) and pinned by
+[`tests/test_theme.py`](../tests/test_theme.py).
+
+**Fonts** — Monocraft for text, JetBrainsMono Nerd Font Propo for glyphs. The
+pill bar's text is 10px × `pillScale`; the panels use fixed sizes because their
+boxes are fixed. Padding scales sub-linearly: `1 + (pillScale - 1) * 0.6`.
+
+**Glyphs** — a ten-step battery ramp with the charging bolt *appended* to the
+level glyph, four WiFi signal tiers, four brightness steps, and Weather Icons
+(not Material Design) for the forecast. Codepoints and names are in
+`shell/theme.py`.
 
 ### 1.3 Configuration
 

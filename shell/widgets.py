@@ -16,6 +16,7 @@ from PyQt6.QtGui import (
     QPainter,
     QPainterPath,
     QPaintEvent,
+    QPen,
     QPixmap,
     QResizeEvent,
     QWheelEvent,
@@ -26,13 +27,13 @@ from shell.theme import FONTS, GLYPHS, PALETTE, Fonts, Palette
 
 
 def text_font(fonts: Fonts = FONTS, size: int | None = None, bold: bool = False) -> QFont:
-    font = QFont(fonts.text_family, size or fonts.pill_size)
+    font = QFont(fonts.text_family, size or fonts.panel_body)
     font.setBold(bold)
     return font
 
 
 def icon_font(fonts: Fonts = FONTS, size: int | None = None) -> QFont:
-    return QFont(fonts.nerd_family, size or fonts.icon_size)
+    return QFont(fonts.nerd_family, size or fonts.cc_button_icon)
 
 
 class IconLabel(QLabel):
@@ -50,6 +51,9 @@ class IconLabel(QLabel):
     def set_glyph(self, glyph: str) -> None:
         if glyph != self.text():
             self.setText(glyph)
+
+    def set_size(self, size: int) -> None:
+        self.setFont(icon_font(size=size))
 
 
 class TextLabel(QLabel):
@@ -69,6 +73,15 @@ class TextLabel(QLabel):
 
     def set_color(self, color: str) -> None:
         self.setStyleSheet(f"color: {color}; background: transparent;")
+
+    def set_size(self, size: int, weight: int | None = None, letter_spacing: float = 0.0) -> None:
+        """`weight` is a CSS-style number (400 normal, 500 medium, 700 bold)."""
+        font = text_font(size=size)
+        if weight is not None:
+            font.setWeight(QFont.Weight(max(1, min(1000, weight))))
+        if letter_spacing:
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, letter_spacing)
+        self.setFont(font)
 
 
 class MarqueeLabel(QWidget):
@@ -100,6 +113,13 @@ class MarqueeLabel(QWidget):
         self._text = text
         self._offset = 0.0
         self._sync_timer()
+        self.update()
+
+    def set_weight(self, weight: int) -> None:
+        """`weight` is a CSS-style number (400 normal, 700 bold)."""
+        font = self.font()
+        font.setWeight(QFont.Weight(max(1, min(1000, weight))))
+        self.setFont(font)
         self.update()
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
@@ -167,7 +187,7 @@ class Slider(QWidget):
     def __init__(
         self,
         value: int = 0,
-        height: int = 8,
+        height: int = 4,
         fill: str | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -177,7 +197,9 @@ class Slider(QWidget):
         self._fill = QColor(fill or PALETTE.slider_fill)
         self._track = QColor(PALETTE.slider_track)
         self._dragging = False
-        self.setMinimumHeight(height + 8)
+        # The bar is 4px tall but the target is not: the original extends the
+        # hit area by twice the bar height above and below so it stays clickable.
+        self.setMinimumHeight(height * 5)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     @property
@@ -228,7 +250,7 @@ class Slider(QWidget):
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        radius = self._bar_height / 2
+        radius = float(self._bar_height)  # the original uses radius == height
         top = (self.height() - self._bar_height) / 2
         track = QRectF(0, top, self.width(), self._bar_height)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -484,6 +506,245 @@ class Card(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
         painter.drawRoundedRect(QRectF(self.rect()), self._radius, self._radius)
+        painter.end()
+
+
+class ToggleButton(QWidget):
+    """A control-center pill: 110x35, rounded, icon and optional label.
+
+    Three of these sit in a row (wifi, do-not-disturb, timer).  Off state is a
+    dark fill with a 1px border; on state drops the border and lightens the
+    fill, and the icon takes an accent colour that differs per button.
+    """
+
+    clicked = pyqtSignal()
+    right_clicked = pyqtSignal()
+    middle_clicked = pyqtSignal()
+
+    WIDTH = 110
+    HEIGHT = 35
+    RADIUS = 10
+
+    def __init__(
+        self,
+        glyph: str,
+        label: str = "",
+        on_color: str | None = None,
+        icon_on_color: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._glyph = glyph
+        self._label = label
+        self._active = False
+        self._hovered = False
+        self._pressed = False
+        self._on_color = QColor(on_color or PALETTE.cc_button_bg_on)
+        self._icon_on_color = QColor(icon_on_color or PALETTE.cc_wifi_icon_on)
+        self.setFixedSize(self.WIDTH, self.HEIGHT)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+    # -- state -------------------------------------------------------------
+
+    def set_active(self, active: bool) -> None:
+        if active != self._active:
+            self._active = active
+            self.update()
+
+    def set_glyph(self, glyph: str) -> None:
+        if glyph != self._glyph:
+            self._glyph = glyph
+            self.update()
+
+    def set_label(self, label: str) -> None:
+        if label != self._label:
+            self._label = label
+            self.update()
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    # -- input -------------------------------------------------------------
+
+    def enterEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        del event
+        self._hovered = True
+        self.update()
+
+    def leaveEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        del event
+        self._hovered = self._pressed = False
+        self.update()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
+        self._pressed = True
+        self.update()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
+        self._pressed = False
+        self.update()
+        if not self.rect().contains(event.position().toPoint()):
+            return
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        elif event.button() == Qt.MouseButton.RightButton:
+            self.right_clicked.emit()
+        elif event.button() == Qt.MouseButton.MiddleButton:
+            self.middle_clicked.emit()
+
+    # -- painting ----------------------------------------------------------
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt override
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # A press shrinks the button slightly, like the original's scale: 0.93.
+        scale = 0.93 if self._pressed else 1.0
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.scale(scale, scale)
+        painter.translate(-self.width() / 2, -self.height() / 2)
+
+        if self._active:
+            background = self._on_color.lighter(120) if self._hovered else self._on_color
+            icon_color = self._icon_on_color
+            label_color = QColor(PALETTE.cc_button_label)
+            border = None
+        else:
+            base = QColor(PALETTE.cc_button_bg_off)
+            background = base.lighter(130) if self._hovered else base
+            icon_color = label_color = QColor(PALETTE.cc_button_fg_off)
+            border = QColor(PALETTE.cc_button_border)
+
+        rect = QRectF(0.5, 0.5, self.width() - 1.0, self.height() - 1.0)
+        painter.setBrush(background)
+        painter.setPen(QPen(border, 1) if border is not None else Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(rect, self.RADIUS, self.RADIUS)
+
+        icon_font_ = icon_font(size=FONTS.cc_button_icon)
+        if not self._label:
+            painter.setPen(icon_color)
+            painter.setFont(icon_font_)
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._glyph)
+        else:
+            label_font = text_font(size=FONTS.cc_button_label)
+            icon_width = QFontMetrics(icon_font_).horizontalAdvance(self._glyph)
+            label_width = QFontMetrics(label_font).horizontalAdvance(self._label)
+            gap = 5.0
+            start = (self.width() - icon_width - gap - label_width) / 2
+            painter.setPen(icon_color)
+            painter.setFont(icon_font_)
+            painter.drawText(
+                QRectF(start, 0, icon_width, self.height()),
+                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
+                self._glyph,
+            )
+            painter.setPen(label_color)
+            painter.setFont(label_font)
+            painter.drawText(
+                QRectF(start + icon_width + gap, 0, label_width + 2, self.height()),
+                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
+                self._label,
+            )
+        painter.end()
+
+
+class TransportButton(QWidget):
+    """A bare media-transport glyph that brightens on hover.
+
+    Not a circular button: the original draws these as plain text, and a chrome
+    ring around them reads as a different product.
+    """
+
+    clicked = pyqtSignal()
+
+    def __init__(self, glyph: str, size: int | None = None, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._glyph = glyph
+        self._hovered = False
+        self._size = size or FONTS.media_control
+        metrics = QFontMetrics(icon_font(size=self._size))
+        self.setFixedSize(metrics.horizontalAdvance(glyph) + 6, metrics.height())
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+    def set_glyph(self, glyph: str) -> None:
+        if glyph != self._glyph:
+            self._glyph = glyph
+            self.update()
+
+    def enterEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        del event
+        self._hovered = True
+        self.update()
+
+    def leaveEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        del event
+        self._hovered = False
+        self.update()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
+            self.clicked.emit()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt override
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QColor(PALETTE.media_control_hover if self._hovered else PALETTE.media_control))
+        painter.setFont(icon_font(size=self._size))
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._glyph)
+        painter.end()
+
+
+class WorkspaceButton(QWidget):
+    """One numbered square in the pill bar's workspace strip."""
+
+    activated = pyqtSignal(int)
+
+    def __init__(self, number: int, pill_scale: float = 1.0, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._number = number
+        self._state = "empty"  # empty | used | active
+        self.set_pill_scale(pill_scale)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_pill_scale(self, pill_scale: float) -> None:
+        side = int(round(17.5 * pill_scale))
+        self._radius = 8 * pill_scale
+        self._font_size = max(6, int(round(FONTS.bar_workspace * pill_scale)))
+        self.setFixedSize(side, side)
+
+    def set_state(self, state: str) -> None:
+        if state != self._state:
+            self._state = state
+            self.update()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.activated.emit(self._number)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt override
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        if self._state == "active":
+            painter.setBrush(QColor(PALETTE.workspace_active_bg))
+        elif self._state == "used":
+            painter.setBrush(QColor(PALETTE.workspace_used_bg))
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self._state != "empty":
+            painter.drawRoundedRect(QRectF(self.rect()), self._radius, self._radius)
+
+        painter.setPen(QColor(PALETTE.workspace_active_fg if self._state == "active" else PALETTE.workspace_idle_fg))
+        font = text_font(size=self._font_size)
+        font.setWeight(QFont.Weight.Light)
+        painter.setFont(font)
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, str(self._number))
         painter.end()
 
 

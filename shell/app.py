@@ -144,6 +144,7 @@ class ChillPillApp(QObject):
         brightness.changed.connect(self._on_brightness_changed)
         media.track_started.connect(self._on_track_started)  # type: ignore[attr-defined]
         media.artwork_ready.connect(self.media_popup.set_artwork)  # type: ignore[attr-defined]
+        media.artwork_ready.connect(self.control_center.set_artwork)  # type: ignore[attr-defined]
         media.changed.connect(self._sync_media_context)
         notifications.arrived.connect(self._on_notification)  # type: ignore[attr-defined]
         notifications.failed.connect(self._on_notification_problem)

@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from shell import modules as modules_pkg  # noqa: E402
 from shell.config import Config  # noqa: E402
+from shell.modules.notifications import Notification  # noqa: E402
 from shell.pill import Pill  # noqa: E402
 from shell.state import MorphContext, PillState, PillStateMachine  # noqa: E402
 from shell.surfaces import (  # noqa: E402
@@ -46,8 +47,6 @@ def seed(registry, *, media: bool, notifications: int) -> None:
     context directly would be overwritten -- the fake has to go in at the
     module layer, exactly where the real reading would arrive.
     """
-    from shell.modules.notifications import Notification
-
     media_module = registry.get("media")
     if media:
         media_module.update(
@@ -103,18 +102,27 @@ def main(out_dir: str = "out") -> int:
     registry = modules_pkg.build_registry(config)
 
     pill = Pill(config, machine)
+    osd = Osd(registry)
+    popup = NotificationPopup(registry)
     for surface in (
         PillBar(registry, config),
         ControlCenter(registry, config),
         Dashboard(registry, config),
-        Osd(registry),
-        NotificationPopup(registry),
+        osd,
+        popup,
         MediaPopup(registry),
         Launcher(registry),
         ClipboardHistory(registry),
         WallpaperSwitcher(registry, config),
     ):
         pill.add_surface(surface)
+
+    # The transient surfaces are filled by the app, not by their modules, so
+    # the preview has to hand them something to draw.
+    osd.show_volume(59, muted=False)
+    popup.show_notification(
+        Notification(id=1, app="Bandwidth", title="Bandwidth Alert", body="Download usage exceeded 100 MB")
+    )
 
     target = Path(out_dir)
     target.mkdir(parents=True, exist_ok=True)

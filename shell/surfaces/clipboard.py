@@ -38,7 +38,7 @@ class ClipboardHistory(Surface):
         header.addWidget(IconLabel(GLYPHS.clipboard, size=14, parent=self))
         self.query = QLineEdit(self)
         self.query.setPlaceholderText("Search clipboard history")
-        self.query.setFont(text_font(size=FONTS.panel_size))
+        self.query.setFont(text_font(size=FONTS.panel_body))
         self.query.setStyleSheet(f"QLineEdit {{ background: transparent; border: none; color: {PALETTE.text}; }}")
         self.query.textChanged.connect(lambda _text: self.refresh())
         self.query.returnPressed.connect(self._copy_selected)
@@ -49,7 +49,7 @@ class ClipboardHistory(Surface):
         outer.addLayout(header)
 
         self.entries = QListWidget(self)
-        self.entries.setFont(text_font(size=FONTS.panel_size))
+        self.entries.setFont(text_font(size=FONTS.panel_body))
         self.entries.setStyleSheet(
             scrollbar_stylesheet()
             + f"""
@@ -62,7 +62,7 @@ class ClipboardHistory(Surface):
         self.entries.itemActivated.connect(lambda _item: self._copy_selected())
         outer.addWidget(self.entries, 1)
 
-        self.status = TextLabel("", size=FONTS.small_size, color=PALETTE.text_dim, parent=self)
+        self.status = TextLabel("", size=FONTS.panel_small, color=PALETTE.text_dim, parent=self)
         outer.addWidget(self.status)
 
     # -- content -----------------------------------------------------------

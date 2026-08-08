@@ -1,8 +1,10 @@
 """The idle surface: the status bar itself.
 
-This is the only surface whose size feeds back into the morph table -- the idle
-width is `row.width + 12*ps + 56*ps`, where `row` is this widget's natural
-content width, so it measures itself and pushes the number into the context.
+Left to right: battery, volume, workspaces, network, clock -- the original's
+order, at its spacing (13 * paddingScale) and margins (28 either side).  There
+is no centring and no stretch; the row is its natural width and the pill sizes
+itself around it, which is what makes the idle width formula in `shell.state`
+depend on this widget's size hint.
 """
 
 from __future__ import annotations
@@ -15,43 +17,65 @@ from shell.config import Config
 from shell.modules.base import ModuleRegistry
 from shell.state import PillState, PillStateMachine
 from shell.surfaces.base import Surface
-from shell.theme import GLYPHS, PALETTE, battery_color, battery_glyph, volume_glyph
-from shell.widgets import IconLabel, TextLabel
+from shell.theme import (
+    FONTS,
+    GLYPHS,
+    PALETTE,
+    battery_color,
+    battery_glyph,
+    padding_scale,
+    volume_glyph,
+    wifi_glyph,
+)
+from shell.widgets import IconLabel, TextLabel, WorkspaceButton
+
+#: The original's `Layout.maximumWidth` on the SSID label, before pillScale.
+SSID_MAX_WIDTH = 90
 
 
-class WorkspaceDots(QWidget):
-    """One dot per virtual desktop; click to switch."""
+class WorkspaceStrip(QWidget):
+    """`maxWorkspaces` numbered squares; click one to switch."""
 
     switch_requested = pyqtSignal(int)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, count: int, pill_scale: float, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._pill_scale = pill_scale
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(4)
-        self._dots: list[IconLabel] = []
+        self._layout.setSpacing(int(round(4 * padding_scale(pill_scale))))
+        self._buttons: list[WorkspaceButton] = []
+        self.set_count(count)
 
-    def set_state(self, count: int, current: int) -> None:
-        while len(self._dots) < count:
-            dot = IconLabel(GLYPHS.workspace_inactive, size=8, parent=self)
-            dot.setCursor(Qt.CursorShape.PointingHandCursor)
-            index = len(self._dots) + 1
-            dot.mouseReleaseEvent = lambda _event, n=index: self.switch_requested.emit(n)  # type: ignore[assignment]
-            self._layout.addWidget(dot)
-            self._dots.append(dot)
-        while len(self._dots) > count:
-            dot = self._dots.pop()
-            self._layout.removeWidget(dot)
-            dot.deleteLater()
-        for index, dot in enumerate(self._dots, start=1):
-            active = index == current
-            dot.set_glyph(GLYPHS.workspace_active if active else GLYPHS.workspace_inactive)
-            dot.set_color(PALETTE.text if active else PALETTE.text_dim)
+    def set_count(self, count: int) -> None:
+        while len(self._buttons) < count:
+            button = WorkspaceButton(len(self._buttons) + 1, self._pill_scale, parent=self)
+            button.activated.connect(self.switch_requested)
+            self._layout.addWidget(button)
+            self._buttons.append(button)
+        while len(self._buttons) > count:
+            button = self._buttons.pop()
+            self._layout.removeWidget(button)
+            button.deleteLater()
+
+    def set_scale(self, pill_scale: float) -> None:
+        self._pill_scale = pill_scale
+        self._layout.setSpacing(int(round(4 * padding_scale(pill_scale))))
+        for button in self._buttons:
+            button.set_pill_scale(pill_scale)
+
+    def set_state(self, current: int, occupied: int) -> None:
+        """`occupied` is how many desktops exist; the rest render as empty."""
+        for index, button in enumerate(self._buttons, start=1):
+            if index == current:
+                button.set_state("active")
+            elif index <= occupied:
+                button.set_state("used")
+            else:
+                button.set_state("empty")
 
 
 class PillBar(Surface):
-    """Workspaces, volume, network, clock, battery -- left to right."""
-
     state = PillState.IDLE
     uses = ("clock", "battery", "volume", "network", "workspaces", "timer")
     #: The bar is what the pill falls back to, so its modules never stop.
@@ -65,34 +89,38 @@ class PillBar(Surface):
         self._config = config
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(14, 0, 14, 0)
-        row.setSpacing(10)
-
-        self._workspaces = WorkspaceDots(self)
-        self._volume_icon = IconLabel(GLYPHS.volume_high, parent=self)
-        self._network_icon = IconLabel(GLYPHS.wifi_off, parent=self)
-        self._timer_label = TextLabel("", color=PALETTE.accent, parent=self)
-        self._clock = TextLabel("--:--", bold=True, parent=self)
-        self._battery_icon = IconLabel(GLYPHS.battery_alert, parent=self)
-        self._battery_text = TextLabel("--", color=PALETTE.text_muted, parent=self)
-
-        row.addWidget(self._workspaces)
-        row.addWidget(self._volume_icon)
-        row.addWidget(self._network_icon)
-        row.addStretch(1)
-        row.addWidget(self._clock)
-        row.addStretch(1)
-        row.addWidget(self._timer_label)
-        row.addWidget(self._battery_icon)
-        row.addWidget(self._battery_text)
         self._row = row
-        self._timer_label.hide()
 
-        self._volume_icon.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._volume_icon.mouseReleaseEvent = self._on_volume_click  # type: ignore[assignment]
-        self._workspaces.switch_requested.connect(self._switch_workspace)
+        self.battery_icon = IconLabel(parent=self)
+        self.battery_text = TextLabel("", parent=self)
+        self.volume_icon = IconLabel(parent=self)
+        self.volume_text = TextLabel("", parent=self)
+        self.workspaces = WorkspaceStrip(config.max_workspaces, config.pill_scale, parent=self)
+        self.network_icon = IconLabel(GLYPHS.wifi_none, parent=self)
+        self.network_text = TextLabel("", parent=self)
+        self.timer_text = TextLabel("", parent=self)
+        self.clock = TextLabel("--:--", parent=self)
+
+        for widget in (
+            self.battery_icon,
+            self.battery_text,
+            self.volume_icon,
+            self.volume_text,
+            self.workspaces,
+            self.network_icon,
+            self.network_text,
+            self.timer_text,
+            self.clock,
+        ):
+            row.addWidget(widget)
+
+        self.timer_text.hide()
+        self.workspaces.switch_requested.connect(self._switch_workspace)
+        self.volume_icon.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.volume_icon.mouseReleaseEvent = self._on_volume_click  # type: ignore[assignment]
 
         self.setMouseTracking(True)
+        self.apply_config(config)
 
     # -- wiring ------------------------------------------------------------
 
@@ -101,48 +129,69 @@ class PillBar(Surface):
             self.module(name).changed.connect(self.refresh)
 
     def refresh(self) -> None:
-        clock = self.module("clock")
-        self._clock.setText(str(clock.get("text", "--:--")))
+        self._refresh_battery()
+        self._refresh_volume()
+        self._refresh_workspaces()
+        self._refresh_network()
+        self._refresh_timer()
+        self.clock.setText(str(self.module("clock").get("text", "--:--")))
+        self.geometry_hint_changed.emit()
 
+    def _refresh_battery(self) -> None:
         battery = self.module("battery")
-        if battery.get("present", False):
-            percent = int(battery.get("percent", 0))
-            charging = bool(battery.get("charging", False))
-            self._battery_icon.set_glyph(battery_glyph(percent, charging))
-            self._battery_icon.set_color(battery_color(percent, charging))
-            self._battery_text.setText(f"{percent}%")
-            self._battery_icon.show()
-            self._battery_text.show()
-        else:
-            self._battery_icon.hide()
-            self._battery_text.hide()
+        present = bool(battery.get("present", False))
+        percent = int(battery.get("percent", 0))
+        charging = bool(battery.get("charging", False))
+        self.battery_icon.set_glyph(battery_glyph(percent, charging, present))
+        # A machine with no battery shows a green plug and no number.
+        self.battery_icon.set_color(battery_color(percent, charging) if present else PALETTE.battery_good)
+        self.battery_text.setVisible(present)
+        if present:
+            self.battery_text.setText(f"{percent}%")
 
+    def _refresh_volume(self) -> None:
         volume = self.module("volume")
         percent = int(volume.get("percent", 0))
         muted = bool(volume.get("muted", False))
-        self._volume_icon.set_glyph(volume_glyph(percent, muted))
-        self._volume_icon.set_color(PALETTE.text_muted if muted else PALETTE.text)
+        self.volume_icon.set_glyph(volume_glyph(percent, muted))
+        self.volume_icon.set_color(PALETTE.volume_muted if muted else PALETTE.fg)
+        self.volume_text.setText("muted" if muted else f"{percent}%")
 
+    def _refresh_workspaces(self) -> None:
+        workspaces = self.module("workspaces")
+        if not workspaces.get("enabled", False):
+            self.workspaces.hide()
+            return
+        self.workspaces.show()
+        self.workspaces.set_state(
+            current=int(workspaces.get("current", 1)),
+            occupied=int(workspaces.get("total", 0)),
+        )
+
+    def _refresh_network(self) -> None:
         network = self.module("network")
         kind = str(network.get("kind", "none"))
-        self._network_icon.set_glyph({"wifi": GLYPHS.wifi, "ethernet": GLYPHS.ethernet}.get(kind, GLYPHS.wifi_off))
-        self._network_icon.set_color(PALETTE.text if kind != "none" else PALETTE.text_dim)
+        connected = kind != "none"
+        signal = int(network.get("signal", 0))
+        ssid = str(network.get("ssid", ""))
 
-        workspaces = self.module("workspaces")
-        if workspaces.get("enabled", False):
-            self._workspaces.show()
-            self._workspaces.set_state(int(workspaces.get("count", 0)), int(workspaces.get("current", 1)))
+        self.network_icon.set_glyph(wifi_glyph(signal, connected=kind == "wifi"))
+        self.network_icon.set_color(PALETTE.wifi_on if connected else PALETTE.wifi_off)
+        if not connected:
+            self.network_text.setText("off")
+        elif kind == "ethernet":
+            self.network_text.setText("wired")
         else:
-            self._workspaces.hide()
+            self.network_text.setText(ssid or "N/A")
 
+    def _refresh_timer(self) -> None:
         timer = self.module("timer")
-        if timer.get("running", False):
-            self._timer_label.setText(f"{GLYPHS.timer} {timer.get('text', '')}")
-            self._timer_label.show()
-        else:
-            self._timer_label.hide()
+        running = bool(timer.get("running", False))
+        self.timer_text.setVisible(running)
+        if running:
+            self.timer_text.setText(f"{GLYPHS.timer_running} {timer.get('text', '')}")
 
-        self.geometry_hint_changed.emit()
+    # -- geometry ----------------------------------------------------------
 
     def contribute_context(self, machine: PillStateMachine) -> None:
         """Feed the measured row size into the idle geometry formula."""
@@ -155,6 +204,25 @@ class PillBar(Surface):
 
     def apply_config(self, config: Config) -> None:
         self._config = config
+        scale = config.pill_scale
+        padding = padding_scale(scale)
+
+        self._row.setContentsMargins(int(round(28 * padding)), 0, int(round(28 * padding)), 0)
+        self._row.setSpacing(int(round(13 * padding)))
+
+        text_size = max(6, int(round(FONTS.bar_text * scale)))
+        icon_size = max(6, int(round(FONTS.bar_icon * scale)))
+        for label in (self.battery_text, self.volume_text, self.network_text, self.timer_text, self.clock):
+            label.set_size(text_size, weight=500)
+        # The clock is tracked slightly tighter, as in the original.
+        self.clock.set_size(text_size, weight=500, letter_spacing=-0.5)
+        for icon in (self.battery_icon, self.volume_icon, self.network_icon):
+            icon.set_size(icon_size)
+
+        self.network_text.setMaximumWidth(int(round(SSID_MAX_WIDTH * scale)))
+        self.workspaces.set_scale(scale)
+        self.workspaces.set_count(config.max_workspaces)
+        self.timer_text.set_color(PALETTE.fg)
         self.refresh()
 
     # -- interaction -------------------------------------------------------
@@ -167,11 +235,16 @@ class PillBar(Surface):
         self.module("workspaces").switch_to(number)  # type: ignore[attr-defined]
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
+        """Left opens the control center, right the dashboard, middle the clipboard.
+
+        The same three buttons the original binds, so muscle memory carries over.
+        """
         if event.button() == Qt.MouseButton.LeftButton:
             self.surface_requested.emit(PillState.CONTROL_CENTER)
         elif event.button() == Qt.MouseButton.RightButton:
             self.surface_requested.emit(PillState.DASHBOARD)
+        elif event.button() == Qt.MouseButton.MiddleButton:
+            self.surface_requested.emit(PillState.CLIPBOARD)
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt override
-        """Scrolling the bar changes volume, like the original."""
         self.module("volume").step(5 if event.angleDelta().y() > 0 else -5)  # type: ignore[attr-defined]

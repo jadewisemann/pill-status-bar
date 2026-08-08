@@ -22,7 +22,7 @@ from shell.modules.base import ModuleRegistry
 from shell.modules.notifications import Notification
 from shell.state import PillState
 from shell.surfaces.base import Surface
-from shell.theme import GLYPHS, PALETTE
+from shell.theme import FONTS, GLYPHS, PALETTE
 from shell.widgets import IconLabel, MarqueeLabel, TextLabel
 
 
@@ -41,28 +41,29 @@ class NotificationPopup(Surface):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(20, 0, 20, 0)
-        row.setSpacing(12)
+        row.setContentsMargins(22, 0, 22, 0)
+        row.setSpacing(10)
 
-        self.icon = IconLabel(GLYPHS.bell, size=14, parent=self)
+        self.icon = IconLabel(GLYPHS.bell, size=FONTS.popup_icon, parent=self)
         row.addWidget(self.icon)
 
         text = QVBoxLayout()
-        text.setSpacing(0)
-        self.title = MarqueeLabel("", size=10, parent=self)
-        self.body = MarqueeLabel("", size=9, color=PALETTE.text_muted, parent=self)
+        text.setSpacing(3)
+        # Stretches above and below keep the two lines together in the middle;
+        # without them the layout spreads them to the pill's full 52px.
+        text.addStretch(1)
+        self.title = MarqueeLabel("", size=FONTS.popup_title, parent=self)
+        self.title.set_weight(700)
+        self.body = MarqueeLabel("", size=FONTS.popup_body, color=PALETTE.notif_popup_body, parent=self)
         text.addWidget(self.title)
         text.addWidget(self.body)
+        text.addStretch(1)
         row.addLayout(text, 1)
-
-        self.app = TextLabel("", size=8, color=PALETTE.text_dim, parent=self)
-        row.addWidget(self.app)
 
     def show_notification(self, notification: Notification) -> None:
         self._current = notification
         self.title.set_text(notification.title or notification.app or "Notification")
         self.body.set_text(notification.body.replace("\n", " "))
-        self.app.setText(notification.app[:16])
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
         if event.button() == Qt.MouseButton.LeftButton and self._current is not None:
@@ -105,7 +106,7 @@ class FullscreenToast(QWidget):
         text = QVBoxLayout()
         text.setSpacing(2)
         self.title = TextLabel("", size=11, bold=True, parent=self)
-        self.body = TextLabel("", size=9, color=PALETTE.text_muted, parent=self)
+        self.body = TextLabel("", size=9, color=PALETTE.notif_popup_body, parent=self)
         text.addWidget(self.title)
         text.addWidget(self.body)
         row.addLayout(text, 1)
@@ -162,5 +163,5 @@ class FullscreenToast(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         path = QPainterPath()
         path.addRoundedRect(0.0, 0.0, float(self.width()), float(self.height()), 18.0, 18.0)
-        painter.fillPath(path, QColor(PALETTE.background))
+        painter.fillPath(path, QColor(PALETTE.bg))
         painter.end()

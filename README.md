@@ -59,11 +59,37 @@ python tools/preview.py out/     # renders all of them to PNG, no Windows needed
 git clone https://github.com/jadewisemann/pill-status-bar
 cd pill-status-bar
 pip install -e .
+python -m shell.doctor      # check the machine before starting anything
 python main.py
+```
+
+`shell.doctor` lists every backend and says which feature each missing one
+costs you. Only two things are blockers — Python 3.12+ and Windows 1809+;
+everything else degrades one feature and says so:
+
+```
+[+] Python 3.12+      running 3.12.4
+[+] Windows           build 22631 (Windows 11: Mica and rounded corners available)
+[+] pycaw             volume slider and mute
+[~] WMI               internal display brightness unavailable
+[~] font: Monocraft   not installed; Qt will substitute and glyphs may show as boxes
 ```
 
 The first run writes a commented `%APPDATA%\chillpill-win\config.jsonc`. Saving
 that file reloads the shell live — no restart.
+
+### What to expect the first time
+
+This has never been run on Windows. Treat the first launch as a debugging
+session, not an install:
+
+* run `python main.py` from a terminal so you can see the log
+* if it dies, the traceback names the module — every backend is isolated behind
+  `shell/modules/` or `shell/platform/`, so one broken backend is one file
+* the desktop work area is the thing worth watching. If the shell is killed
+  before `quit()` runs, the AppBar reservation can outlive it and leave a strip
+  of desktop unusable. Starting the shell again and quitting it cleanly from
+  the tray releases it; so does signing out.
 
 ---
 

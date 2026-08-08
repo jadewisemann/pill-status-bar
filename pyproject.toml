@@ -28,14 +28,25 @@ dependencies = [
     "comtypes>=1.2; sys_platform == 'win32'",
     "pycaw>=20240210; sys_platform == 'win32'",
     "WMI>=1.5; sys_platform == 'win32'",
-    "pyvda>=0.4; sys_platform == 'win32'",
-    # Only the WinRT namespaces actually used: media transport controls,
-    # notification listening and the stream types the album art arrives in.
-    "winrt-Windows.Media.Control>=2.0; sys_platform == 'win32'",
-    "winrt-Windows.UI.Notifications>=2.0; sys_platform == 'win32'",
-    "winrt-Windows.UI.Notifications.Management>=2.0; sys_platform == 'win32'",
-    "winrt-Windows.Storage.Streams>=2.0; sys_platform == 'win32'",
-    "winrt-Windows.Foundation>=2.0; sys_platform == 'win32'",
+    # Virtual desktops.  Upstream pyvda tracks COM interface GUIDs that Microsoft
+    # changes between Windows 11 builds, so a new build can break it until pyvda
+    # catches up -- `"workspaceBackend": "none"` is the escape hatch.
+    "pyvda>=0.6; sys_platform == 'win32'",
+    # WinRT is one distribution per namespace.  Only the ones actually reached
+    # are listed, but that includes the namespaces of *returned* types, not just
+    # the ones imported by name: iterating a notification list needs
+    # Foundation.Collections, and reading a toast's source app needs
+    # ApplicationModel, even though neither appears in an import statement.
+    "winrt.windows.foundation>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.foundation.collections>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.applicationmodel>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.data.xml.dom>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.media>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.media.control>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.storage.streams>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.ui>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.ui.notifications>=3.2.1; sys_platform == 'win32'",
+    "winrt.windows.ui.notifications.management>=3.2.1; sys_platform == 'win32'",
     # Icon extraction for the built-in launcher (skipped when Flow handles it).
     "Pillow>=10.0; sys_platform == 'win32'",
 ]
@@ -46,6 +57,7 @@ dev = ["pytest>=8.0", "ruff>=0.5"]
 [project.scripts]
 chillpill = "shell.app:run"
 chillpillc = "shell.cli:main"
+chillpill-doctor = "shell.doctor:main"
 
 [project.urls]
 Homepage = "https://github.com/jadewisemann/pill-status-bar"

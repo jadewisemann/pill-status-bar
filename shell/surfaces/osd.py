@@ -16,6 +16,7 @@ from PyQt6.QtCore import QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPaintEvent
 from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
+from shell.anim import NOTIFICATION_FADE
 from shell.modules.base import ModuleRegistry
 from shell.modules.timer import format_remaining
 from shell.state import PillState
@@ -71,6 +72,7 @@ class Osd(Surface):
     """Shows whichever value moved last."""
 
     state = PillState.OSD
+    fade = NOTIFICATION_FADE
     uses = ()
 
     def __init__(self, registry: ModuleRegistry, parent: QWidget | None = None) -> None:

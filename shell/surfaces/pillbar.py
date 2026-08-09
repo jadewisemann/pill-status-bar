@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QWheelEvent
 from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
+from shell.anim import BAR_FADE
 from shell.config import Config
 from shell.modules.base import ModuleRegistry
 from shell.state import PillState, PillStateMachine
@@ -77,6 +78,7 @@ class WorkspaceStrip(QWidget):
 
 class PillBar(Surface):
     state = PillState.IDLE
+    fade = BAR_FADE
     uses = ("clock", "battery", "volume", "network", "workspaces", "timer")
     #: The bar is what the pill falls back to, so its modules never stop.
     retain_modules = True

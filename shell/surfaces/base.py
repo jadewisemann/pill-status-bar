@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtCore import QEasingCurve, QVariantAnimation, pyqtSignal
+from PyQt6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
+from shell.anim import PANEL_FADE, FadeTiming
 from shell.modules.base import Module, ModuleRegistry
 from shell.state import PillState, PillStateMachine
 
@@ -28,6 +29,14 @@ class Surface(QWidget):
     state: PillState = PillState.IDLE
     #: Modules this surface needs while visible.
     uses: tuple[str, ...] = ()
+    #: How this surface's content fades in and out.  The default is the
+    #: original's panel timing: a 15ms beat, then 150ms OutExpo -- the box is
+    #: already growing when the content arrives, which is what makes the morph
+    #: read as one movement rather than two.
+    fade: FadeTiming = PANEL_FADE
+
+    #: Raised once the fade-out has finished, so the pill can stop drawing it.
+    faded_out = pyqtSignal()
 
     def __init__(self, registry: ModuleRegistry, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -35,6 +44,56 @@ class Surface(QWidget):
         self._held: dict[str, Module] = {}
         self._visible = False
         self._bound_to: dict[str, Module] = {}
+
+        self._effect = QGraphicsOpacityEffect(self)
+        self._effect.setOpacity(0.0)
+        self.setGraphicsEffect(self._effect)
+        self._fade = QVariantAnimation(self)
+        self._fade.valueChanged.connect(lambda value: self._effect.setOpacity(float(value)))
+        self._fade.finished.connect(self._on_fade_finished)
+
+    # -- fading ------------------------------------------------------------
+
+    def fade_in(self) -> None:
+        self._start_fade(1.0, self.fade.in_ms, self.fade.delay_ms)
+
+    def fade_out(self) -> None:
+        self._start_fade(0.0, self.fade.out_ms, 0)
+
+    def show_instantly(self) -> None:
+        """No fade -- used on the first paint, before anything is on screen."""
+        self._fade.stop()
+        self._effect.setOpacity(1.0)
+
+    @property
+    def opacity(self) -> float:
+        return float(self._effect.opacity())
+
+    def _start_fade(self, target: float, duration_ms: int, delay_ms: int) -> None:
+        start = self._effect.opacity()
+        if abs(start - target) < 0.001 and self._fade.state() != QVariantAnimation.State.Running:
+            if target == 0.0:
+                self.faded_out.emit()
+            return
+        self._fade.stop()
+        # A delay is expressed as a flat leading segment rather than a timer:
+        # one animation is easier to interrupt cleanly than a timer plus one.
+        total = max(1, duration_ms + delay_ms)
+        self._fade.setDuration(total)
+        self._fade.setStartValue(start)
+        self._fade.setEndValue(target)
+        if delay_ms and total:
+            hold = delay_ms / total
+            curve = QEasingCurve(QEasingCurve.Type.OutExpo)
+            self._fade.setEasingCurve(curve)
+            self._fade.setKeyValues([(0.0, start), (hold, start), (1.0, target)])
+        else:
+            self._fade.setEasingCurve(QEasingCurve.Type.OutExpo)
+        self._fade.start()
+
+    def _on_fade_finished(self) -> None:
+        if self._effect.opacity() <= 0.001:
+            self.faded_out.emit()
 
     # -- modules -----------------------------------------------------------
 

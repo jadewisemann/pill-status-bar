@@ -18,6 +18,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 
+from shell.anim import NOTIFICATION_FADE
 from shell.modules.base import ModuleRegistry
 from shell.modules.notifications import Notification
 from shell.state import PillState
@@ -30,6 +31,7 @@ class NotificationPopup(Surface):
     """The in-pill toast."""
 
     state = PillState.NOTIFICATION
+    fade = NOTIFICATION_FADE
     uses = ()
 
     #: The toast was clicked; the app opens the control center in response.

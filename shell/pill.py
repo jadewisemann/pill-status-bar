@@ -25,7 +25,7 @@ from PyQt6.QtCore import (
     pyqtSignal,
 )
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QScreen
-from PyQt6.QtWidgets import QApplication, QStackedLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QLayout, QStackedLayout, QWidget
 
 from shell.config import Config
 from shell.platform import IS_WINDOWS
@@ -66,6 +66,7 @@ class Pill(QWidget):
         self._config = config
         self._machine = machine
         self._surfaces: dict[PillState, Surface] = {}
+        self._current_page: Surface | None = None
         self._radius = 20.0
         self._background = QColor(machine.morph().background)
         self._edge = EDGE_TOP
@@ -80,9 +81,18 @@ class Pill(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
         self.setMouseTracking(True)
 
+        # StackAll, not StackOne: during a morph the outgoing surface is still
+        # fading out while the incoming one fades in, so both have to be drawn.
+        # Only the current one takes the mouse -- see `_focus_page`.
         self._pages = QStackedLayout(self)
         self._pages.setContentsMargins(0, 0, 0, 0)
-        self._pages.setStackingMode(QStackedLayout.StackingMode.StackOne)
+        self._pages.setStackingMode(QStackedLayout.StackingMode.StackAll)
+        # Without this the window can never be smaller than its largest page --
+        # a stacked layout reports the maximum of its children as its minimum,
+        # so the 600px wallpaper grid would pin the idle bar to 600px wide.
+        # The pill is sized by the morph table, never by its content, and the
+        # content is clipped to the box while it is smaller (as in the original).
+        self._pages.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
 
         self._width_anim = self._make_animation(WIDTH_DURATION_MS, self._on_width)
         self._height_anim = self._make_animation(0, self._on_height)
@@ -118,8 +128,13 @@ class Pill(QWidget):
         """Register a page.  The state it serves comes from the surface itself."""
         self._surfaces[surface.state] = surface
         surface.setParent(self)
+        # Explicit, so the surface's own layout cannot re-impose a floor that
+        # would stop the pill shrinking back to the bar.
+        surface.setMinimumSize(0, 0)
         self._pages.addWidget(surface)
         surface.geometry_hint_changed.connect(self.apply_morph)
+        surface.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        surface.faded_out.connect(lambda s=surface: self._on_surface_faded_out(s))
 
     def surface(self, state: PillState) -> Surface | None:
         return self._surfaces.get(state)
@@ -135,13 +150,43 @@ class Pill(QWidget):
         self._sync_context(state)
         target = self._machine.morph()
 
-        page = self._surfaces.get(state)
-        if page is not None and self._pages.currentWidget() is not page:
-            self._pages.setCurrentWidget(page)
-
+        self._focus_page(state, animated)
         self._background = QColor(target.background)
         self._animate_to(target, state, animated)
         self.update()
+
+    def _focus_page(self, state: PillState, animated: bool) -> None:
+        """Cross-fade to `state`'s surface.
+
+        The incoming page is raised and made interactive at once -- waiting for
+        its fade to finish would mean a click landing on nothing for 165ms.
+        """
+        page = self._surfaces.get(state)
+        if page is self._current_page:
+            return
+        outgoing, self._current_page = self._current_page, page
+
+        if page is not None:
+            self._pages.setCurrentWidget(page)
+            page.raise_()
+            page.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+            page.show()
+            if animated:
+                page.fade_in()
+            else:
+                page.show_instantly()
+
+        if outgoing is not None and outgoing is not page:
+            outgoing.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            if animated:
+                outgoing.fade_out()
+            else:
+                outgoing.hide()
+
+    def _on_surface_faded_out(self, surface: Surface) -> None:
+        """Stop drawing a surface once it is invisible, but only if it is stale."""
+        if surface is not self._current_page:
+            surface.hide()
 
     def _sync_context(self, state: PillState) -> MorphContext:
         """Let the active surface contribute its measurements to the context."""

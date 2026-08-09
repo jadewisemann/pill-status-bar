@@ -43,6 +43,18 @@ def run(shell: ChillPillApp, *argv: str) -> dict:
     return shell._handle(parse_argv(list(argv)))
 
 
+def settle(shell: ChillPillApp, qapp: QApplication) -> None:
+    """Apply the morph and let the widgets finish reacting.
+
+    One pass is not enough: measuring the pill bar can change the row width,
+    which invalidates the geometry and schedules another morph. Draining the
+    event queue between passes is what makes the size deterministic.
+    """
+    for _ in range(3):
+        shell._pill.apply_morph(animated=False)
+        qapp.processEvents()
+
+
 # -- construction -----------------------------------------------------------
 
 
@@ -54,6 +66,35 @@ def test_every_state_has_a_surface(shell: ChillPillApp) -> None:
 
 def test_starts_idle(shell: ChillPillApp) -> None:
     assert shell._machine.state is PillState.IDLE
+
+
+@pytest.mark.parametrize("state", list(PillState))
+def test_the_window_is_the_size_the_table_says(shell: ChillPillApp, qapp: QApplication, state: PillState) -> None:
+    """The morph table is the only thing that sizes the pill.
+
+    A stacked layout reports the maximum of its pages as its minimum size, so
+    without an explicit override the 600px wallpaper grid pins the idle bar to
+    600px wide -- the pill can grow but never shrink back. That failure is
+    invisible in the state machine, which keeps reporting the right numbers.
+    """
+    shell._machine.close_all()
+    if state is not PillState.IDLE:
+        shell._machine.open(state)
+    settle(shell, qapp)
+
+    morph = shell._machine.morph()
+    assert (shell._pill.width(), shell._pill.height()) == (round(morph.width), round(morph.height))
+
+
+def test_the_pill_shrinks_back_after_the_widest_surface(shell: ChillPillApp, qapp: QApplication) -> None:
+    """Open the 600px wallpaper grid, then close it: the bar must be narrow again."""
+    shell._machine.open(PillState.WALLPAPERS)
+    settle(shell, qapp)
+    assert shell._pill.width() == 600
+
+    shell._machine.close_all()
+    settle(shell, qapp)
+    assert shell._pill.width() < 600
 
 
 # -- IPC round trips --------------------------------------------------------

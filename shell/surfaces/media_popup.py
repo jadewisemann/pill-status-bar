@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
+from shell.anim import MEDIA_POPUP_FADE
 from shell.modules.base import ModuleRegistry
 from shell.state import PillState
 from shell.surfaces.base import Surface
@@ -15,6 +16,7 @@ from shell.widgets import Artwork, GlyphButton, MarqueeLabel, ProgressBar, TextL
 
 class MediaPopup(Surface):
     state = PillState.MEDIA_POPUP
+    fade = MEDIA_POPUP_FADE
     uses = ("media",)
 
     #: Clicked through to the full player.

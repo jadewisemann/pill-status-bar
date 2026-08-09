@@ -7,7 +7,7 @@ shapes on a dark ground, and QSS on native controls fights that at every step
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -23,7 +23,12 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget
 
+from shell import anim
+from shell.anim import AnimatedColor, AnimatedFloat
 from shell.theme import FONTS, GLYPHS, PALETTE, Fonts, Palette
+
+#: A fully transparent colour, so an "empty" chip can still ease its fill.
+_TRANSPARENT = "#00000000"
 
 
 def text_font(fonts: Fonts = FONTS, size: int | None = None, bold: bool = False) -> QFont:
@@ -36,24 +41,73 @@ def icon_font(fonts: Fonts = FONTS, size: int | None = None) -> QFont:
     return QFont(fonts.nerd_family, size or fonts.cc_button_icon)
 
 
-class IconLabel(QLabel):
-    """A single Nerd Font glyph, optionally tinted."""
+class IconLabel(QWidget):
+    """A single Nerd Font glyph.
+
+    Painted rather than styled: the colour eases between states and the glyph
+    pulses when it changes, and neither is expressible through a stylesheet.
+    """
 
     def __init__(self, glyph: str = "", size: int | None = None, parent: QWidget | None = None) -> None:
-        super().__init__(glyph, parent)
-        self.setFont(icon_font(size=size))
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.set_color(PALETTE.text)
+        super().__init__(parent)
+        self._glyph = glyph
+        self._size = size or FONTS.cc_button_icon
+        self._color = AnimatedColor(PALETTE.fg, anim.HOVER_COLOR_MS, self)
+        self._color.changed.connect(self.update)
+        self._scale = AnimatedFloat(1.0, anim.ICON_PULSE_UP_MS, parent=self)
+        self._scale.changed.connect(self.update)
+        self._pulses = False
+        self._resize_to_glyph()
 
-    def set_color(self, color: str) -> None:
-        self.setStyleSheet(f"color: {color}; background: transparent;")
+    # -- content -----------------------------------------------------------
 
     def set_glyph(self, glyph: str) -> None:
-        if glyph != self.text():
-            self.setText(glyph)
+        if glyph == self._glyph:
+            return
+        self._glyph = glyph
+        self._resize_to_glyph()
+        if self._pulses:
+            self._scale.pulse(anim.ICON_PULSE_SCALE, anim.ICON_PULSE_UP_MS, anim.ICON_PULSE_DOWN_MS)
+        self.update()
+
+    def set_color(self, color: str, animated: bool = True) -> None:
+        self._color.set(color, animated)
 
     def set_size(self, size: int) -> None:
-        self.setFont(icon_font(size=size))
+        if size == self._size:
+            return
+        self._size = size
+        self._resize_to_glyph()
+        self.update()
+
+    def set_pulses(self, pulses: bool) -> None:
+        """Turn on the tick the volume icon does when its glyph changes."""
+        self._pulses = pulses
+
+    def text(self) -> str:
+        return self._glyph
+
+    def _resize_to_glyph(self) -> None:
+        metrics = QFontMetrics(icon_font(size=self._size))
+        # Room for the pulse overshoot, so it is not clipped at the peak.
+        width = int(metrics.horizontalAdvance(self._glyph or "M") * anim.ICON_PULSE_SCALE) + 2
+        self.setFixedSize(max(width, 1), metrics.height() + 2)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt override
+        del event
+        if not self._glyph:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        scale = self._scale.value
+        if scale != 1.0:
+            painter.translate(self.width() / 2, self.height() / 2)
+            painter.scale(scale, scale)
+            painter.translate(-self.width() / 2, -self.height() / 2)
+        painter.setPen(self._color.value)
+        painter.setFont(icon_font(size=self._size))
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._glyph)
+        painter.end()
 
 
 class TextLabel(QLabel):
@@ -194,7 +248,10 @@ class Slider(QWidget):
         super().__init__(parent)
         self._value = max(0, min(100, value))
         self._bar_height = height
-        self._fill = QColor(fill or PALETTE.slider_fill)
+        self._fill = AnimatedColor(fill or PALETTE.slider_fill, anim.HOVER_COLOR_MS, self)
+        self._fill.changed.connect(self.update)
+        self._shown = AnimatedFloat(self._value / 100, anim.SLIDER_FILL_MS, parent=self)
+        self._shown.changed.connect(self.update)
         self._track = QColor(PALETTE.slider_track)
         self._dragging = False
         # The bar is 4px tall but the target is not: the original extends the
@@ -211,13 +268,13 @@ class Slider(QWidget):
         if clamped == self._value:
             return
         self._value = clamped
-        self.update()
+        # While dragging, follow the pointer exactly; easing there feels like lag.
+        self._shown.set(clamped / 100, animated=not self._dragging)
         if notify:
             self.value_changed.emit(clamped)
 
     def set_fill(self, color: str) -> None:
-        self._fill = QColor(color)
-        self.update()
+        self._fill.set(color)
 
     def _value_at(self, x: float) -> int:
         if self.width() <= 0:
@@ -256,9 +313,9 @@ class Slider(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self._track)
         painter.drawRoundedRect(track, radius, radius)
-        filled_width = self.width() * self._value / 100
+        filled_width = self.width() * self._shown.value
         if filled_width > 0:
-            painter.setBrush(self._fill)
+            painter.setBrush(self._fill.value)
             painter.drawRoundedRect(
                 QRectF(0, top, max(filled_width, self._bar_height), self._bar_height), radius, radius
             )
@@ -336,7 +393,7 @@ class GlyphButton(QWidget):
     def set_active(self, active: bool) -> None:
         if active != self._active:
             self._active = active
-            self.update()
+            self._sync_colors()
 
     @property
     def active(self) -> bool:
@@ -541,6 +598,12 @@ class ToggleButton(QWidget):
         self._pressed = False
         self._on_color = QColor(on_color or PALETTE.cc_button_bg_on)
         self._icon_on_color = QColor(icon_on_color or PALETTE.cc_wifi_icon_on)
+        self._background = AnimatedColor(PALETTE.cc_button_bg_off, anim.TOGGLE_COLOR_MS, self)
+        self._icon_color = AnimatedColor(PALETTE.cc_button_fg_off, anim.TOGGLE_COLOR_MS, self)
+        self._label_color = AnimatedColor(PALETTE.cc_button_fg_off, anim.TOGGLE_COLOR_MS, self)
+        self._press_scale = AnimatedFloat(1.0, anim.TOGGLE_PRESS_MS, QEasingCurve.Type.OutQuad, parent=self)
+        for animated in (self._background, self._icon_color, self._label_color, self._press_scale):
+            animated.changed.connect(self.update)
         self.setFixedSize(self.WIDTH, self.HEIGHT)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
@@ -550,7 +613,7 @@ class ToggleButton(QWidget):
     def set_active(self, active: bool) -> None:
         if active != self._active:
             self._active = active
-            self.update()
+            self._sync_colors()
 
     def set_glyph(self, glyph: str) -> None:
         if glyph != self._glyph:
@@ -566,25 +629,39 @@ class ToggleButton(QWidget):
     def active(self) -> bool:
         return self._active
 
+    def _sync_colors(self) -> None:
+        """Push the current visual state into the eased colours."""
+        if self._active:
+            base = self._on_color.lighter(120) if self._hovered else self._on_color
+            self._background.set(base)
+            self._icon_color.set(self._icon_on_color)
+            self._label_color.set(PALETTE.cc_button_label)
+        else:
+            base = QColor(PALETTE.cc_button_bg_off)
+            self._background.set(base.lighter(130) if self._hovered else base)
+            self._icon_color.set(PALETTE.cc_button_fg_off)
+            self._label_color.set(PALETTE.cc_button_fg_off)
+
     # -- input -------------------------------------------------------------
 
     def enterEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         del event
         self._hovered = True
-        self.update()
+        self._sync_colors()
 
     def leaveEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         del event
         self._hovered = self._pressed = False
-        self.update()
+        self._press_scale.set(1.0)
+        self._sync_colors()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
         self._pressed = True
-        self.update()
+        self._press_scale.set(0.93)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
         self._pressed = False
-        self.update()
+        self._press_scale.set(1.0)
         if not self.rect().contains(event.position().toPoint()):
             return
         if event.button() == Qt.MouseButton.LeftButton:
@@ -601,22 +678,17 @@ class ToggleButton(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        # A press shrinks the button slightly, like the original's scale: 0.93.
-        scale = 0.93 if self._pressed else 1.0
-        painter.translate(self.width() / 2, self.height() / 2)
-        painter.scale(scale, scale)
-        painter.translate(-self.width() / 2, -self.height() / 2)
+        # A press shrinks the button, like the original's scale: 0.93.
+        scale = self._press_scale.value
+        if scale != 1.0:
+            painter.translate(self.width() / 2, self.height() / 2)
+            painter.scale(scale, scale)
+            painter.translate(-self.width() / 2, -self.height() / 2)
 
-        if self._active:
-            background = self._on_color.lighter(120) if self._hovered else self._on_color
-            icon_color = self._icon_on_color
-            label_color = QColor(PALETTE.cc_button_label)
-            border = None
-        else:
-            base = QColor(PALETTE.cc_button_bg_off)
-            background = base.lighter(130) if self._hovered else base
-            icon_color = label_color = QColor(PALETTE.cc_button_fg_off)
-            border = QColor(PALETTE.cc_button_border)
+        background = self._background.value
+        icon_color = self._icon_color.value
+        label_color = self._label_color.value
+        border = None if self._active else QColor(PALETTE.cc_button_border)
 
         rect = QRectF(0.5, 0.5, self.width() - 1.0, self.height() - 1.0)
         painter.setBrush(background)
@@ -708,6 +780,10 @@ class WorkspaceButton(QWidget):
         super().__init__(parent)
         self._number = number
         self._state = "empty"  # empty | used | active
+        self._background = AnimatedColor(_TRANSPARENT, anim.WORKSPACE_COLOR_MS, self)
+        self._background.changed.connect(self.update)
+        self._foreground = AnimatedColor(PALETTE.workspace_idle_fg, anim.WORKSPACE_COLOR_MS, self)
+        self._foreground.changed.connect(self.update)
         self.set_pill_scale(pill_scale)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -718,9 +794,16 @@ class WorkspaceButton(QWidget):
         self.setFixedSize(side, side)
 
     def set_state(self, state: str) -> None:
-        if state != self._state:
-            self._state = state
-            self.update()
+        if state == self._state:
+            return
+        self._state = state
+        self._background.set(
+            {
+                "active": PALETTE.workspace_active_bg,
+                "used": PALETTE.workspace_used_bg,
+            }.get(state, _TRANSPARENT)
+        )
+        self._foreground.set(PALETTE.workspace_active_fg if state == "active" else PALETTE.workspace_idle_fg)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
         if event.button() == Qt.MouseButton.LeftButton:

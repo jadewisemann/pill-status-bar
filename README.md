@@ -39,9 +39,18 @@ geometry.
 Width and radius ease over 225 ms; height takes 550 ms, so the pill widens
 before it grows. Both curves are `OutExpo`.
 
+Nothing in the pill changes instantly. The box eases, and so does everything
+inside it — content cross-fades between surfaces with a 15 ms beat so the box
+is already moving when the new content arrives, slider fills ease over 60 ms,
+workspace chips over 120 ms, and the volume icon pulses when its glyph changes.
+The full timing table is in [`shell/anim.py`](shell/anim.py).
+
 ```
-python tools/preview.py out/     # renders all of them to PNG, no Windows needed
+python tools/preview.py out/                              # every state, to PNG
+python tools/filmstrip.py idle controlCenter out/m.png    # a morph, frame by frame
 ```
+
+Both run anywhere — no Windows needed.
 
 ---
 

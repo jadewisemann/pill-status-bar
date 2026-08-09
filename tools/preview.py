@@ -143,6 +143,11 @@ def main(out_dir: str = "out") -> int:
         app.processEvents()
 
         morph = machine.morph()
+        # Report the widget's real size, not the table's: they diverge when a
+        # layout imposes a floor, and printing the table would hide that.
+        actual = (pill.width(), pill.height())
+        expected = (round(morph.width), round(morph.height))
+        flag = "" if actual == expected else f"  !! expected {expected[0]}x{expected[1]}"
         image = QImage(QSize(pill.width(), pill.height()), QImage.Format.Format_ARGB32_Premultiplied)
         image.fill(QColor(0, 0, 0, 0))
         painter = QPainter(image)
@@ -150,7 +155,7 @@ def main(out_dir: str = "out") -> int:
         painter.end()
         path = target / f"{name}.png"
         image.save(str(path))
-        print(f"{name:<30} {morph.width:>6.0f} x {morph.height:<6.0f} r{morph.radius:<5.0f} -> {path}")
+        print(f"{name:<30} {actual[0]:>4} x {actual[1]:<4} r{morph.radius:<4.0f} -> {path}{flag}")
 
     registry.stop_all()
     return 0

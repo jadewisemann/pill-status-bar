@@ -21,6 +21,7 @@ from PyQt6.QtCore import QDateTime, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
+from shell.anim import DASHBOARD_FADE
 from shell.config import Config
 from shell.modules.base import ModuleRegistry
 from shell.modules.network import format_bytes
@@ -93,6 +94,7 @@ class ActionStrip(QWidget):
 
 class Dashboard(Surface):
     state = PillState.DASHBOARD
+    fade = DASHBOARD_FADE
     uses = ("battery", "network", "bandwidth", "weather", "clock")
 
     power_action = pyqtSignal(str)  # lock | sleep | reboot | shutdown | logout

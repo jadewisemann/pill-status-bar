@@ -42,8 +42,30 @@ data in [`shell/state.py`](../shell/state.py). `ps` = `pillScale`.
 `notifBump = min(list height + 40, 130)`, and exactly `0` when the stack is
 empty.
 
-**Animation** — width and radius: `OutExpo`, 225 ms. Height: `OutExpo`, 550 ms,
-except the media auto-popup at 650 ms.
+**Animation** — the box: width and radius `OutExpo` 225 ms, height `OutExpo`
+550 ms (650 ms for the media auto-popup). But the box is only half of it; the
+*content* animates too, and skipping that is what makes a morph read as a
+resize. Full table in [`shell/anim.py`](../shell/anim.py):
+
+| What | Timing |
+| --- | --- |
+| pill bar content | fade, 100 ms |
+| panel content (control center, launcher, clipboard, wallpapers) | 15 ms beat, then 150 ms `OutExpo` |
+| dashboard content | 1 ms beat, then 300 ms `OutExpo` |
+| notification popup / media popup | 150 ms / 180 ms |
+| slider fill | 60 ms |
+| workspace chip colour | 120 ms |
+| toggle colour / press scale | 150 ms / 80 ms `OutQuad` |
+| hover colours | 100 ms |
+| volume icon, on glyph change | pulse to 1.15× over 60 ms, back over 100 ms |
+
+The 15 ms beat before a panel appears is the load-bearing detail: the box is
+already growing when its content starts arriving, so the two movements read as
+one. Outgoing and incoming surfaces are cross-faded, never swapped.
+
+`python tools/filmstrip.py idle controlCenter out/morph.png` samples a real
+morph every 40 ms and lays the frames out side by side, so the timing can be
+inspected without a Windows machine.
 
 **Background** — media popup `#151515`, control-center-with-media `#1a1a1a`,
 everything else `#171717`.

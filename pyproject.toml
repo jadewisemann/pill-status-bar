@@ -73,6 +73,12 @@ addopts = "-q"
 # this, the suite passes under `python -m pytest` (which puts the repo root on
 # sys.path) and fails under a bare `pytest`, which is what CI and the README use.
 pythonpath = ["."]
+# No test here does real work: the whole suite runs in seconds. A test that
+# takes a minute is blocked on something -- a pipe, a thread, a socket -- and
+# the stack of every thread at that moment is the only useful thing to know
+# about it. Without this a blocked test is a silent CI job that ends at the
+# runner's timeout with nothing to read.
+faulthandler_timeout = 60
 
 [tool.ruff]
 line-length = 120

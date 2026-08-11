@@ -85,3 +85,43 @@ def test_shell_reaches_vendor_only_through_the_platform_layer() -> None:
             continue
         offenders = [name for name in imported_names(path) if name.startswith("vendor")]
         assert not offenders, f"{path.relative_to(REPO)} should not import {offenders} directly"
+
+
+def struct_names(path: pathlib.Path) -> set[str]:
+    """Names of ctypes Structure/Union subclasses declared in `path`."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except SyntaxError as exc:
+        pytest.skip(f"{path.name} needs a newer Python than this interpreter: {exc.msg}")
+    return {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        for base in node.bases
+        if (isinstance(base, ast.Attribute) and base.attr in ("Structure", "Union"))
+        or (isinstance(base, ast.Name) and base.id in ("Structure", "Union"))
+    }
+
+
+def test_shell_never_redeclares_a_vendored_struct() -> None:
+    """One Win32 struct, one definition in the process.
+
+    `ctypes.windll.kernel32` is a process-wide singleton and argtypes are cached
+    on its function objects, so whichever struct class the vendored bindings
+    registered wins for everyone. A second declaration of the same struct in
+    `shell/` is a *different* type as far as ctypes is concerned, and passing a
+    pointer to it raises ArgumentError -- at runtime, on Windows only, in
+    whichever module happens to run first.
+
+    That cannot be caught off Windows by executing the code, but it can be read
+    off the source, which is the whole point of the boundary tests.
+    """
+    vendored = struct_names(VENDOR / "win32" / "structs.py")
+    assert vendored, "no structs found in the vendored tree; this test is not testing anything"
+
+    for path in python_files(SHELL):
+        clashes = sorted(struct_names(path) & vendored)
+        assert not clashes, (
+            f"{path.relative_to(REPO)} redeclares {clashes}, which vendor/win32/structs.py already "
+            f"defines. Import the vendored one instead -- ctypes will not accept both."
+        )

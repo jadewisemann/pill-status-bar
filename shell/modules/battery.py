@@ -2,26 +2,16 @@
 
 from __future__ import annotations
 
-import ctypes
-from ctypes import wintypes
+import logging
 
 from shell.modules.base import Module
 from shell.platform import IS_WINDOWS
 
+logger = logging.getLogger(__name__)
+
 BATTERY_FLAG_NO_BATTERY = 128
 UNKNOWN_PERCENT = 255
 UNKNOWN_TIME = 0xFFFFFFFF
-
-
-class SYSTEM_POWER_STATUS(ctypes.Structure):  # noqa: N801 - Win32 struct name
-    _fields_ = [
-        ("ACLineStatus", wintypes.BYTE),
-        ("BatteryFlag", wintypes.BYTE),
-        ("BatteryLifePercent", wintypes.BYTE),
-        ("SystemStatusFlag", wintypes.BYTE),
-        ("BatteryLifeTime", wintypes.DWORD),
-        ("BatteryFullLifeTime", wintypes.DWORD),
-    ]
 
 
 class BatteryModule(Module):
@@ -38,8 +28,27 @@ class BatteryModule(Module):
     def refresh(self) -> None:
         if not IS_WINDOWS:
             return
+        # The vendored binding, not a local struct and not `ctypes.windll`.
+        # `windll.kernel32` is a process-wide singleton and prototypes are
+        # cached on it, so vendor/win32/bindings/kernel32.py -- imported the
+        # moment anything touches the pipe or the AppBar -- has already set
+        # `GetSystemPowerStatus.argtypes` to a pointer to *its*
+        # SYSTEM_POWER_STATUS. A second, identical struct declared here is a
+        # different type to ctypes, and the call raises ArgumentError rather
+        # than returning a wrong answer. Two definitions of one Win32 struct in
+        # one process is the bug; using the vendored one is the fix.
+        try:
+            import ctypes
+
+            from vendor.win32.bindings.kernel32 import kernel32
+            from vendor.win32.structs import SYSTEM_POWER_STATUS
+        except Exception as exc:
+            logger.debug("kernel32 power status unavailable: %s", exc)
+            self.update(present=False)
+            return
+
         status = SYSTEM_POWER_STATUS()
-        if not ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):  # type: ignore[attr-defined]
+        if not kernel32.GetSystemPowerStatus(ctypes.byref(status)):
             self.update(present=False)
             return
 

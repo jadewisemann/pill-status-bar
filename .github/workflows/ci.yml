@@ -124,7 +124,12 @@ jobs:
     # module graph cannot see costs a feature only at runtime, on a machine the
     # CI does not have. Building on every push means the release tag is never
     # the first time the spec is run.
-    needs: [lint, test]
+    # Deliberately not gated on `test`. This job answers "does the spec still
+    # freeze a bundle that can import itself", which is orthogonal to whether
+    # the suite passes -- and gating it on the matrix means one red leg hides
+    # packaging breakage completely. The release workflow is where a bad build
+    # must not ship; this one is where it must not go unnoticed.
+    needs: [lint]
     uses: ./.github/workflows/build-windows.yml
     with:
       artifact-name: chillpill-win-x64-dev

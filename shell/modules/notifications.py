@@ -114,17 +114,41 @@ class NotificationsModule(Module):
         asyncio.run_coroutine_threadsafe(self._connect(), self._loop)
 
     def on_stop(self) -> None:
-        if self._listener is not None and self._token is not None:
-            with suppress(Exception):
-                self._listener.remove_notification_changed(self._token)
-        self._listener = None
-        self._token = None
-        if self._loop is not None:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._thread is not None:
-            self._thread.join(timeout=2)
+        """Drop the listener on its own loop thread; see `media.MediaModule.on_stop`.
+
+        The listener is a WinRT object owned by the loop thread's COM
+        apartment, so unhooking it and letting go of it from anywhere else
+        marshals back to that thread -- which must therefore still be running.
+        """
+        loop, thread = self._loop, self._thread
         self._loop = None
         self._thread = None
+
+        def release() -> None:
+            if self._listener is not None and self._token is not None:
+                with suppress(Exception):
+                    self._listener.remove_notification_changed(self._token)
+            self._listener = None
+            self._token = None
+
+        if loop is None or thread is None or not thread.is_alive():
+            release()
+            return
+
+        released = threading.Event()
+
+        def release_and_stop() -> None:
+            try:
+                release()
+            finally:
+                released.set()
+                loop.stop()
+
+        loop.call_soon_threadsafe(release_and_stop)
+        if not released.wait(timeout=2):
+            logger.warning("notification loop did not release its listener; leaving it to process exit")
+            loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=2)
 
     def _run_loop(self) -> None:
         assert self._loop is not None

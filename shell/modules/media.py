@@ -72,17 +72,48 @@ class MediaModule(Module):
         self._position_timer.start()
 
     def on_stop(self) -> None:
+        """Release the WinRT objects on the thread that owns them, then stop.
+
+        Every object here belongs to the COM apartment of the thread that
+        created it -- this module's loop thread.  Dropping the last reference
+        from another thread marshals the release back to that apartment, so it
+        has to happen while the loop is still turning.  Releasing after the
+        loop stops means waiting on a reply nobody is left to send: the shell
+        hangs on quit rather than shutting down slowly.
+        """
         if self._position_timer is not None:
             self._position_timer.stop()
             self._position_timer = None
-        self._detach_session()
-        if self._loop is not None:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._thread is not None:
-            self._thread.join(timeout=2)
+
+        loop, thread = self._loop, self._thread
         self._loop = None
         self._thread = None
-        self._manager = None
+
+        if loop is None or thread is None or not thread.is_alive():
+            # Never started, or the thread is already gone: nothing was
+            # marshalled, so releasing here is safe.
+            self._detach_session()
+            self._manager = None
+            return
+
+        released = threading.Event()
+
+        def release_and_stop() -> None:
+            try:
+                self._detach_session()
+                self._manager = None
+            finally:
+                released.set()
+                loop.stop()
+
+        loop.call_soon_threadsafe(release_and_stop)
+        if not released.wait(timeout=2):
+            # The loop is wedged. Deliberately leave `_manager` set: clearing
+            # it here is the deadlock this method exists to avoid, and a
+            # reference held until the process exits costs nothing.
+            logger.warning("media loop did not release its WinRT objects; leaving them to process exit")
+            loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=2)
 
     def _run_loop(self) -> None:
         assert self._loop is not None

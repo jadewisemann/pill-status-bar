@@ -36,7 +36,11 @@ jobs:
     # Linux-only suite, and Linux-only breakage cannot hide behind Windows.
     name: test (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # A full leg is install plus a suite that runs in seconds. Ten minutes is
+    # generous headroom and still cuts a wedged run short: faulthandler prints
+    # the stacks at 60s but lets the process keep blocking, so something has to
+    # end the job.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

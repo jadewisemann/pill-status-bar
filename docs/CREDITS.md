@@ -54,6 +54,9 @@ dragged in yasb's widget and settings abstractions.
 **A note on PyQt6:** it is GPLv3 unless you hold a Riverbank commercial
 licence. This project's own source is MIT, but a distributed binary that bundles
 PyQt6 is a combined work and inherits GPLv3 obligations. That affects anyone
-shipping a packaged `.exe`, not anyone running from source. PySide6 (LGPL) would
+shipping a packaged `.exe`, not anyone running from source — which is why the
+release workflow ships [packaging/BINARY-LICENSE.md](../packaging/BINARY-LICENSE.md)
+inside the zip, stating the binary's terms and where its corresponding source
+is. PySide6 (LGPL) would
 be the swap if that ever matters; nothing here depends on PyQt-specific
 behaviour beyond `pyqtProperty` and `pyqtSignal` spellings.

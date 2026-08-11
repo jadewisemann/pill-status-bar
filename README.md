@@ -1,5 +1,8 @@
 # ChillPill-Win
 
+[![CI](https://github.com/jadewisemann/pill-status-bar/actions/workflows/ci.yml/badge.svg)](https://github.com/jadewisemann/pill-status-bar/actions/workflows/ci.yml)
+[![Release](https://github.com/jadewisemann/pill-status-bar/actions/workflows/release.yml/badge.svg)](https://github.com/jadewisemann/pill-status-bar/actions/workflows/release.yml)
+
 A morphing pill shell for Windows.
 
 One frameless window sits at the top of the screen showing the time, battery,
@@ -71,6 +74,17 @@ pip install -e .
 python -m shell.doctor      # check the machine before starting anything
 python main.py
 ```
+
+Or take the packaged build from
+[Releases](https://github.com/jadewisemann/pill-status-bar/releases) — a zip
+with no Python needed. Unzip it, run `ChillPill-console.exe doctor` first, then
+`ChillPill.exe`. `ChillPill-console.exe` is the same build with a console
+attached, so it is the one to run when you want to see the log, and it carries
+the command line too (`ChillPill-console.exe ctl volume 40`).
+
+Note that the packaged build is **GPLv3**, while this source is MIT: bundling
+PyQt6 makes the binary a combined work. `BINARY-LICENSE.md` ships inside the zip
+and explains it; running from source is unaffected.
 
 `shell.doctor` lists every backend and says which feature each missing one
 costs you. Only two things are blockers — Python 3.12+ and Windows 1809+;
@@ -238,6 +252,41 @@ ruff check . && ruff format --check .
 The tests run anywhere. Everything platform-specific degrades to a no-op off
 Windows, on purpose: it keeps the parts that carry the design — the size table
 above all — testable without a Windows box.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+| job | what it is for |
+| --- | --- |
+| lint | `ruff check` and `ruff format --check`, on a pinned ruff |
+| test | the suite on Windows *and* Linux, Python 3.12 and 3.13 — the "runs anywhere" claim, enforced. The Windows legs also run `shell.doctor`, which is the only place pycaw, pyvda, WMI and the WinRT projections are imported at all |
+| preview | renders every state and two morphs to PNG and uploads them, so a diff's visual effect is inspectable from the run summary |
+| package | freezes the Windows build — see below |
+
+### Releases
+
+Tag a commit and the packaged build appears on the release page:
+
+```
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` checks the tag against `version` in
+`pyproject.toml` *before* building, freezes the bundle, and publishes the zip
+with its SHA-256 (as a pre-release while the version is 0.x). Running the
+workflow by hand from the Actions tab builds without publishing, which is how to
+check a packaging change before committing to a tag.
+
+The build itself lives in `.github/workflows/build-windows.yml` and is called by
+both, so the artifact a release ships is the same recipe CI has been running all
+along. It freezes `packaging/chillpill.spec` with PyInstaller, then runs
+`doctor` **inside the frozen bundle** — a hidden import the module graph could
+not see is otherwise a feature that goes missing only at runtime, on a machine
+CI does not have. `packaging/entry.py` is the frozen entry point: it gives back
+the `doctor` and `ctl` subcommands that a packaged app has no `pip install` to
+put on PATH.
 
 ## Licence
 

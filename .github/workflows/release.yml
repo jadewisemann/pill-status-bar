@@ -1,0 +1,105 @@
+name: Release
+
+# Tag a commit and the packaged Windows build appears on the release page:
+#
+#     git tag v0.1.0 && git push origin v0.1.0
+#
+# The tag must match `version` in pyproject.toml -- that is checked before
+# anything is built, so a mistyped tag costs seconds, not a published release.
+# `workflow_dispatch` runs the same build without publishing anything, which is
+# how you check a packaging change before committing to a tag.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "pyproject version: $version"
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            echo "tag: $tag"
+            if [ "$tag" != "v$version" ]; then
+              echo "::error::tag $tag does not match pyproject version $version. Tag v$version, or bump pyproject first."
+              exit 1
+            fi
+          fi
+
+          # 0.x is not a promise, and neither is anything with a suffix. The
+          # shell has not yet run on real Windows hardware (docs/RISKS.md), so
+          # this stays a pre-release until it has.
+          case "$version" in
+            0.*|*-*) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: verify
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      artifact-name: chillpill-win-x64-release
+      retention-days: 90
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: chillpill-win-x64-release
+          path: dist
+
+      - name: Notes
+        env:
+          ZIP: ${{ needs.build.outputs.zip }}
+        run: |
+          ls -l dist
+          test -f "dist/$ZIP" || { echo "::error::$ZIP is not in the artifact"; exit 1; }
+          sed -e "s|{{ZIP}}|$ZIP|g" \
+              -e "s|{{REPO}}|$GITHUB_REPOSITORY|g" \
+              -e "s|{{TAG}}|$GITHUB_REF_NAME|g" \
+              .github/release-notes.md > notes.md
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          flags=""
+          if [ "$PRERELEASE" = "true" ]; then flags="--prerelease"; fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ChillPill-Win $TAG" \
+            --notes-file notes.md \
+            --generate-notes \
+            $flags \
+            dist/*.zip dist/*.sha256

@@ -68,6 +68,11 @@ packages = ["shell", "shell.modules", "shell.surfaces", "shell.platform", "shell
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# `tools/` is a developer script directory, not part of the installed package,
+# and test_vendor.py imports the vendoring script to check its own work. Without
+# this, the suite passes under `python -m pytest` (which puts the repo root on
+# sys.path) and fails under a bare `pytest`, which is what CI and the README use.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 120

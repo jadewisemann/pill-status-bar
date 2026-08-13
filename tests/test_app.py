@@ -14,6 +14,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QEvent  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from shell.app import ChillPillApp  # noqa: E402
@@ -37,6 +38,17 @@ def shell(qapp: QApplication, tmp_path, monkeypatch) -> ChillPillApp:
     app.start()
     yield app
     app.quit()
+    # Tear the Qt side down deterministically, while the objects can still
+    # take delivery of whatever is queued for them.  Left to the garbage
+    # collector, this test's widgets die at some arbitrary point during a
+    # *later* test -- occasionally mid-processEvents(), which is a segfault,
+    # not a failure.
+    qapp.processEvents()
+    app._pill.deleteLater()
+    app.toast.deleteLater()
+    app.deleteLater()
+    qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    qapp.processEvents()
 
 
 def run(shell: ChillPillApp, *argv: str) -> dict:

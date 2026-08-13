@@ -11,12 +11,19 @@ Default bindings mirror the original shell's Hyprland keys (spec §1.5), with
 from __future__ import annotations
 
 import logging
+import time
+from contextlib import suppress
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from shell.platform import IS_WINDOWS
 
 logger = logging.getLogger(__name__)
+
+#: Listeners whose OS thread refused to exit.  Destroying a QThread while its
+#: thread is still running is fatal (an access violation, not an exception), so
+#: a wedged listener is kept here -- alive but abandoned -- until process exit.
+_abandoned: list[tuple[object, object]] = []
 
 #: hotkey string -> IPC command, mirroring the original Hyprland binds.
 DEFAULT_BINDINGS: dict[str, str] = {
@@ -92,15 +99,40 @@ class HotkeyManager(QObject):
         return len(parsed)
 
     def stop(self) -> None:
-        if self._listener is None:
+        listener = self._listener
+        if listener is None:
             return
-        try:
-            self._listener.stop()  # type: ignore[attr-defined]
-            self._listener.wait(2000)  # type: ignore[attr-defined]
-        except Exception as exc:  # pragma: no cover
-            logger.debug("hotkey listener shutdown: %s", exc)
         self._listener = None
-        self._dispatcher = None
+        dispatcher, self._dispatcher = self._dispatcher, None
+
+        with suppress(Exception):
+            from vendor.compat.events import EventService
+
+            EventService().bus.event.disconnect(self._on_bus_event)
+
+        # The listener's stop() posts WM_QUIT to the thread's message queue,
+        # but the thread only *has* a queue once run() has called PeekMessageW
+        # -- and only publishes its thread id just before that.  A single
+        # stop() therefore races startup: the WM_QUIT lands nowhere and the
+        # thread blocks in GetMessageW forever.  Post it again until the
+        # thread is seen exiting.  (stop() can also throw when it iterates the
+        # binding table while the thread is still filling it in; a retry after
+        # registration settles is the fix for that too.)
+        deadline = time.monotonic() + 5.0
+        while True:
+            with suppress(Exception):
+                listener.stop()  # type: ignore[attr-defined]
+            if listener.wait(250):  # type: ignore[attr-defined]
+                return
+            if time.monotonic() >= deadline:
+                break
+
+        # Never let a QThread be destroyed while its thread is running: that
+        # is an access violation in Qt, not an exception.  Keep the listener
+        # (and the dispatcher its queued events point at) for the life of the
+        # process instead.
+        _abandoned.append((listener, dispatcher))
+        logger.warning("hotkey listener did not shut down; abandoning its thread")
 
     def _on_bus_event(self, name: str, args: tuple) -> None:
         if name != "handle_widget_hotkey" or not args:

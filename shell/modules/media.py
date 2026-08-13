@@ -40,6 +40,7 @@ class MediaModule(Module):
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._manager: Any = None
+        self._manager_token: Any = None
         self._session: Any = None
         self._tokens: list[tuple[Any, str, Any]] = []
         self._last_track_key: str | None = None
@@ -92,16 +93,14 @@ class MediaModule(Module):
         if loop is None or thread is None or not thread.is_alive():
             # Never started, or the thread is already gone: nothing was
             # marshalled, so releasing here is safe.
-            self._detach_session()
-            self._manager = None
+            self._release_manager()
             return
 
         released = threading.Event()
 
         def release_and_stop() -> None:
             try:
-                self._detach_session()
-                self._manager = None
+                self._release_manager()
             finally:
                 released.set()
                 loop.stop()
@@ -114,6 +113,20 @@ class MediaModule(Module):
             logger.warning("media loop did not release its WinRT objects; leaving them to process exit")
             loop.call_soon_threadsafe(loop.stop)
         thread.join(timeout=2)
+
+    def _release_manager(self) -> None:
+        """Unhook and drop the session manager.
+
+        The event registration keeps the manager pointing back at this module;
+        left in place, a manager the system still holds can call into a module
+        that no longer exists.
+        """
+        self._detach_session()
+        if self._manager is not None and self._manager_token is not None:
+            with suppress(Exception):
+                self._manager.remove_current_session_changed(self._manager_token)
+        self._manager_token = None
+        self._manager = None
 
     def _run_loop(self) -> None:
         assert self._loop is not None
@@ -137,7 +150,9 @@ class MediaModule(Module):
             logger.error("could not get media session manager: %s", exc)
             self.failed.emit("media session manager unavailable")
             return
-        self._manager.add_current_session_changed(lambda *_: self._submit(self._attach_current_session()))
+        self._manager_token = self._manager.add_current_session_changed(
+            lambda *_: self._submit(self._attach_current_session())
+        )
         await self._attach_current_session()
 
     async def _attach_current_session(self) -> None:
